@@ -190,5 +190,5 @@ STEP 8として継続的改善プロセスを追加し、プロジェクトの�
 ## 関連リソース
 
 - [プロセスエンジニアリング理論文書](../theory/)
-- [プロジェクト固有文書](../project-specific/)
+
 - [document-format-specifications.md](document-format-specifications.md) - 詳細なフォーマット仕様

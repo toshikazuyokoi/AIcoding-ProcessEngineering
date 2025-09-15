@@ -190,5 +190,5 @@ Continuous design-implementation consistency checks have been incorporated as a 
 ## Related Resources
 
 - [Process Engineering Theory Documents](../theory/)
-- [Project-Specific Documents](../project-specific/)
+
 - [document-format-specifications.md](document-format-specifications.md) - Detailed format specifications

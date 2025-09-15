@@ -546,8 +546,8 @@ flowchart TD
 | **チェック項目** | - 要件カバレッジ<br/>- 技術的実現可能性<br/>- 非機能要件の達成可能性<br/>- リスク評価 |
 | **アウトプット** | 品質ゲート判定結果 |
 | **詳細仕様** | [品質ゲート2テンプレート](../templates/quality-gate-2-template.md) |
-| **チェックリスト** | [品質ゲート2チェックリスト](../templates/quality-gate-2-template.md#チェックリスト) |
-| **実施手順** | [品質ゲート2実施ガイド](../templates/quality-gate-2-template.md#実施手順) |
+| **チェックリスト** | [品質ゲート2チェックリスト](../templates/quality-gate-2-template.md#8-完了チェックリスト) |
+| **実施手順** | [品質ゲート2実施ガイド](./quality-gate-implementation-guide-v1.3.md#3-品質ゲート2-実施手順) |
 | **判定基準** | - 全要件のマッピング完了<br/>- 技術的実証<br/>- リスク対策の明確化 |
 | **不合格時アクション** | STEP 2.1へのフィードバック |
 
@@ -676,8 +676,8 @@ flowchart TD
 | **チェック項目** | - インターフェース定義の完全性<br/>- データモデルの整合性<br/>- 設計パターンの適切性<br/>- 循環依存の有無 |
 | **アウトプット** | 品質ゲート判定結果 |
 | **詳細仕様** | [品質ゲート3テンプレート](../templates/quality-gate-3-template.md) |
-| **チェックリスト** | [品質ゲート3チェックリスト](../templates/quality-gate-3-template.md#チェックリスト) |
-| **実施手順** | [品質ゲート3実施ガイド](../templates/quality-gate-3-template.md#実施手順) |
+| **チェックリスト** | [品質ゲート3チェックリスト](../templates/quality-gate-3-template.md#10-完了チェックリスト) |
+| **実施手順** | [品質ゲート3実施ガイド](./quality-gate-implementation-guide-v1.3.md#4-品質ゲート3-実施手順) |
 | **判定基準** | - 全インターフェース定義完了<br/>- データモデル正規化<br/>- 設計レビュー承認 |
 | **不合格時アクション** | STEP 3.1へのフィードバック |
 
@@ -922,8 +922,8 @@ flowchart TD
 |------|------|
 | **プロセス** | 実装の品質と設計準拠性を検証する |
 | **詳細仕様** | [品質ゲート4テンプレート](../templates/quality-gate-4-template.md) |
-| **チェックリスト** | [品質ゲート4チェックリスト](../templates/quality-gate-4-template.md#チェックリスト) |
-| **実施手順** | [品質ゲート4実施ガイド](../templates/quality-gate-4-template.md#実施手順) |
+| **チェックリスト** | [品質ゲート4チェックリスト](../templates/quality-gate-4-template.md#11-完了チェックリスト) |
+| **実施手順** | [品質ゲート4実施ガイド](./quality-gate-implementation-guide-v1.3.md#5-品質ゲート4-実施手順) |
 | **インプット** | - システム品質レポート（STEP 7より）<br/>- 詳細設計書（STEP 3より） |
 | **チェック項目** | - コーディング規約準拠<br/>- テストカバレッジ達成<br/>- 設計準拠性<br/>- 性能要件達成 |
 | **アウトプット** | 品質ゲート判定結果 |
