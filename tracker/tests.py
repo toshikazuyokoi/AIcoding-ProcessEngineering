@@ -7,6 +7,7 @@ from tracker.services.user_service import UserService
 from tracker.services.issue_service import IssueService
 from tracker.services.notification_service import NotificationService
 from tracker.services.system_settings_service import SystemSettingsService
+from tracker.services.statistics_service import StatisticsService
 
 User = get_user_model()
 
@@ -1456,3 +1457,280 @@ class SystemSettingsServiceTest(TestCase):
             SystemSettingsService.update_from_dict({
                 "unknown_field": True
             })
+
+
+class StatisticsServiceTest(TestCase):
+    def setUp(self):
+        # テストデータ作成
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.user2 = User.objects.create_user(
+            username='testuser2',
+            email='test2@example.com',
+            password='testpass123'
+        )
+        self.project = Project.objects.create(
+            name='Test Project',
+            description='Test Description',
+            created_by=self.user
+        )
+        self.project2 = Project.objects.create(
+            name='Test Project 2',
+            description='Test Description 2',
+            created_by=self.user2
+        )
+
+    def test_get_project_statistics_success(self):
+        """プロジェクト統計取得成功テスト"""
+        # チケット作成
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='Test Issue 1',
+            description='Description',
+            priority='high',
+            status='open'
+        )
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='Test Issue 2',
+            description='Description',
+            priority='medium',
+            status='resolved'
+        )
+        
+        stats = StatisticsService.get_project_statistics(self.project.id)
+        self.assertIsNotNone(stats)
+        self.assertEqual(stats.total_issues, 2)
+        self.assertEqual(stats.open_issues, 1)
+        self.assertEqual(stats.closed_issues, 1)
+
+    def test_get_project_statistics_nonexistent(self):
+        """存在しないプロジェクトの統計取得テスト"""
+        stats = StatisticsService.get_project_statistics(99999)
+        self.assertIsNone(stats)
+
+    def test_get_project_statistics_dict_success(self):
+        """プロジェクト統計辞書取得成功テスト"""
+        # チケット作成
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='Test Issue',
+            description='Description',
+            priority='high'
+        )
+        
+        stats_dict = StatisticsService.get_project_statistics_dict(self.project.id)
+        self.assertIsNotNone(stats_dict)
+        self.assertEqual(stats_dict['project_id'], self.project.id)
+        self.assertEqual(stats_dict['total_issues'], 1)
+        self.assertIn('open', stats_dict)
+        self.assertIn('closed', stats_dict)
+        self.assertIn('by_priority', stats_dict)
+
+    def test_get_project_statistics_dict_nonexistent(self):
+        """存在しないプロジェクトの統計辞書取得テスト"""
+        stats_dict = StatisticsService.get_project_statistics_dict(99999)
+        self.assertIsNone(stats_dict)
+
+    def test_get_global_statistics(self):
+        """全体統計取得テスト"""
+        # 複数プロジェクトにチケット作成
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='Issue 1',
+            description='Description',
+            priority='high'
+        )
+        Issue.objects.create(
+            project=self.project2,
+            created_by=self.user2,
+            title='Issue 2',
+            description='Description',
+            priority='medium',
+            status='resolved'
+        )
+        
+        stats = StatisticsService.get_global_statistics()
+        self.assertEqual(stats['total_projects'], 2)
+        self.assertEqual(stats['total_issues'], 2)
+        self.assertEqual(stats['open'], 1)
+        self.assertEqual(stats['closed'], 1)
+        self.assertIn('by_priority', stats)
+
+    def test_get_user_statistics_success(self):
+        """ユーザー統計取得成功テスト"""
+        # ユーザーが作成したチケット
+        issue1 = Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='Created Issue',
+            description='Description',
+            priority='high'
+        )
+        # ユーザーに担当されたチケット
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user2,
+            assigned_to=self.user,
+            title='Assigned Issue',
+            description='Description',
+            priority='medium',
+            status='resolved'
+        )
+        # コメント作成
+        Comment.objects.create(
+            issue=issue1,
+            user=self.user,
+            content='Test comment'
+        )
+        
+        stats = StatisticsService.get_user_statistics(self.user.id)
+        self.assertEqual(stats['user_id'], self.user.id)
+        self.assertEqual(stats['created_issues']['total'], 1)
+        self.assertEqual(stats['assigned_issues']['total'], 1)
+        self.assertEqual(stats['comments'], 1)
+
+    def test_get_user_statistics_nonexistent(self):
+        """存在しないユーザーの統計取得エラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            StatisticsService.get_user_statistics(99999)
+        self.assertIn('指定されたユーザーが存在しません', str(context.exception))
+
+    def test_get_issue_status_breakdown_project(self):
+        """プロジェクト指定ステータス別内訳テスト"""
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='Open Issue',
+            description='Description',
+            status='open'
+        )
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='Closed Issue',
+            description='Description',
+            status='resolved'
+        )
+        
+        breakdown = StatisticsService.get_issue_status_breakdown(self.project.id)
+        self.assertEqual(breakdown['open'], 1)
+        self.assertEqual(breakdown['resolved'], 1)
+
+    def test_get_issue_status_breakdown_global(self):
+        """全体ステータス別内訳テスト"""
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='Issue 1',
+            description='Description',
+            status='open'
+        )
+        Issue.objects.create(
+            project=self.project2,
+            created_by=self.user2,
+            title='Issue 2',
+            description='Description',
+            status='resolved'
+        )
+        
+        breakdown = StatisticsService.get_issue_status_breakdown()
+        self.assertEqual(breakdown['open'], 1)
+        self.assertEqual(breakdown['resolved'], 1)
+
+    def test_get_issue_status_breakdown_nonexistent_project(self):
+        """存在しないプロジェクトのステータス別内訳エラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            StatisticsService.get_issue_status_breakdown(99999)
+        self.assertIn('指定されたプロジェクトが存在しません', str(context.exception))
+
+    def test_get_issue_priority_breakdown_project(self):
+        """プロジェクト指定優先度別内訳テスト"""
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='High Priority',
+            description='Description',
+            priority='high'
+        )
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='Medium Priority',
+            description='Description',
+            priority='medium'
+        )
+        
+        breakdown = StatisticsService.get_issue_priority_breakdown(self.project.id)
+        self.assertEqual(breakdown['high'], 1)
+        self.assertEqual(breakdown['medium'], 1)
+
+    def test_get_issue_priority_breakdown_global(self):
+        """全体優先度別内訳テスト"""
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='High Issue',
+            description='Description',
+            priority='high'
+        )
+        Issue.objects.create(
+            project=self.project2,
+            created_by=self.user2,
+            title='Low Issue',
+            description='Description',
+            priority='low'
+        )
+        
+        breakdown = StatisticsService.get_issue_priority_breakdown()
+        self.assertEqual(breakdown['high'], 1)
+        self.assertEqual(breakdown['low'], 1)
+
+    def test_get_issue_priority_breakdown_nonexistent_project(self):
+        """存在しないプロジェクトの優先度別内訳エラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            StatisticsService.get_issue_priority_breakdown(99999)
+        self.assertIn('指定されたプロジェクトが存在しません', str(context.exception))
+
+    def test_get_recent_activity_statistics(self):
+        """最近の活動統計テスト"""
+        # チケット作成
+        Issue.objects.create(
+            project=self.project,
+            created_by=self.user,
+            title='New Issue',
+            description='Description'
+        )
+        
+        stats = StatisticsService.get_recent_activity_statistics(30)
+        self.assertEqual(stats['period_days'], 30)
+        self.assertIn('start_date', stats)
+        self.assertIn('end_date', stats)
+        self.assertEqual(stats['new_issues'], 1)
+
+    def test_validate_statistics_request_success(self):
+        """統計リクエストバリデーション成功テスト"""
+        result = StatisticsService.validate_statistics_request(
+            project_id=self.project.id,
+            user_id=self.user.id
+        )
+        self.assertTrue(result)
+
+    def test_validate_statistics_request_nonexistent_project(self):
+        """存在しないプロジェクトのバリデーションエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            StatisticsService.validate_statistics_request(project_id=99999)
+        self.assertIn('指定されたプロジェクトが存在しません', str(context.exception))
+
+    def test_validate_statistics_request_nonexistent_user(self):
+        """存在しないユーザーのバリデーションエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            StatisticsService.validate_statistics_request(user_id=99999)
+        self.assertIn('指定されたユーザーが存在しません', str(context.exception))
