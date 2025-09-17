@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
@@ -10,6 +10,7 @@ from tracker.services.notification_service import NotificationService
 from tracker.services.system_settings_service import SystemSettingsService
 from tracker.services.statistics_service import StatisticsService
 from tracker.api.user_api import create_user, get_user, update_user, list_users, delete_user
+from tracker.api.notification_api import list_notifications, mark_notification_read, delete_notification
 
 User = get_user_model()
 
@@ -1846,6 +1847,91 @@ class UserAPITest(TestCase):
         
         response_data = json.loads(response.content)
         self.assertEqual(response_data['error'], 'User not found')
+
+
+class NotificationAPITest(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        self.User = get_user_model()
+        self.factory = RequestFactory()
+        self.user = self.User.objects.create_user(
+            username='notifyuser', email='notify@example.com', password='pass123'
+        )
+        self.admin = self.User.objects.create_user(
+            username='admin', email='admin@example.com', password='admin123', is_staff=True
+        )
+        # Create sample notifications
+        self.n1 = Notification.objects.create(user=self.user, message='Hello 1')
+        self.n2 = Notification.objects.create(user=self.user, message='Hello 2')
+
+    def test_list_notifications_self(self):
+        request = self.factory.get('/api/notifications')
+        request.user = self.user
+        response = list_notifications(request)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(len(data), 2)
+        self.assertEqual({d['message'] for d in data}, {'Hello 1', 'Hello 2'})
+
+    def test_list_notifications_unread_only(self):
+        # mark one as read
+        self.n1.mark_as_read()
+        request = self.factory.get('/api/notifications?unread_only=true')
+        request.user = self.user
+        response = list_notifications(request)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]['id'], self.n2.id)
+
+    def test_mark_notification_read_owner(self):
+        request = self.factory.patch(f'/api/notifications/{self.n2.id}/read')
+        request.user = self.user
+        response = mark_notification_read(request, self.n2.id)
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        self.assertTrue(payload['is_read'])
+
+    def test_mark_notification_read_not_found(self):
+        request = self.factory.patch('/api/notifications/99999/read')
+        request.user = self.user
+        response = mark_notification_read(request, 99999)
+        self.assertEqual(response.status_code, 404)
+        payload = json.loads(response.content)
+        self.assertIn('error', payload)
+
+    def test_mark_notification_read_forbidden(self):
+        other = self.User.objects.create_user(
+            username='other', email='other@example.com', password='x'
+        )
+        other_n = Notification.objects.create(user=other, message='Other msg')
+        request = self.factory.patch(f'/api/notifications/{other_n.id}/read')
+        request.user = self.user
+        response = mark_notification_read(request, other_n.id)
+        self.assertEqual(response.status_code, 403)
+
+    def test_delete_notification_owner(self):
+        request = self.factory.delete(f'/api/notifications/{self.n1.id}')
+        request.user = self.user
+        response = delete_notification(request, self.n1.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Notification.objects.filter(id=self.n1.id).exists())
+
+    def test_delete_notification_admin(self):
+        request = self.factory.delete(f'/api/notifications/{self.n2.id}')
+        request.user = self.admin
+        response = delete_notification(request, self.n2.id)
+        self.assertEqual(response.status_code, 200)
+
+    def test_delete_notification_forbidden(self):
+        other = self.User.objects.create_user(
+            username='other2', email='other2@example.com', password='x'
+        )
+        other_n = Notification.objects.create(user=other, message='Other msg 2')
+        request = self.factory.delete(f'/api/notifications/{other_n.id}')
+        request.user = self.user
+        response = delete_notification(request, other_n.id)
+        self.assertEqual(response.status_code, 403)
 
     def test_update_user_success(self):
         """ユーザー更新API成功テスト（自分自身）"""
