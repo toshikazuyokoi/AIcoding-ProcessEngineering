@@ -2,12 +2,14 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
+import json
 from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment, Notification, SystemSettings, Statistics
 from tracker.services.user_service import UserService
 from tracker.services.issue_service import IssueService
 from tracker.services.notification_service import NotificationService
 from tracker.services.system_settings_service import SystemSettingsService
 from tracker.services.statistics_service import StatisticsService
+from tracker.api.user_api import create_user, get_user, update_user, list_users, delete_user
 
 User = get_user_model()
 
@@ -1734,3 +1736,222 @@ class StatisticsServiceTest(TestCase):
         with self.assertRaises(ValidationError) as context:
             StatisticsService.validate_statistics_request(user_id=99999)
         self.assertIn('指定されたユーザーが存在しません', str(context.exception))
+
+
+class UserAPITest(TestCase):
+    def setUp(self):
+        # テストデータ作成
+        self.user_data = {
+            'username': 'testuser',
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+        self.admin_user = User.objects.create_user(
+            username='admin',
+            email='admin@example.com',
+            password='adminpass123',
+            is_staff=True
+        )
+        self.regular_user = User.objects.create_user(
+            username='regular',
+            email='regular@example.com',
+            password='regularpass123'
+        )
+
+    def test_create_user_success(self):
+        """ユーザー作成API成功テスト"""
+        from django.test import RequestFactory
+        import json
+        
+        factory = RequestFactory()
+        request = factory.post(
+            '/api/users/',
+            data=json.dumps(self.user_data),
+            content_type='application/json'
+        )
+        
+        response = create_user(request)
+        self.assertEqual(response.status_code, 201)
+        
+        response_data = json.loads(response.content)
+        self.assertIn('id', response_data)
+        self.assertEqual(response_data['username'], 'testuser')
+        self.assertEqual(response_data['email'], 'test@example.com')
+        self.assertIn('created_at', response_data)
+
+    def test_create_user_missing_field(self):
+        """ユーザー作成API必須フィールド不足エラーテスト"""
+        from django.test import RequestFactory
+        import json
+        
+        factory = RequestFactory()
+        incomplete_data = {'username': 'testuser', 'email': 'test@example.com'}
+        request = factory.post(
+            '/api/users/',
+            data=json.dumps(incomplete_data),
+            content_type='application/json'
+        )
+        
+        response = create_user(request)
+        self.assertEqual(response.status_code, 400)
+        
+        response_data = json.loads(response.content)
+        self.assertIn('Missing required field: password', response_data['error'])
+
+    def test_create_user_invalid_json(self):
+        """ユーザー作成API無効JSON エラーテスト"""
+        from django.test import RequestFactory
+        
+        factory = RequestFactory()
+        request = factory.post(
+            '/api/users/',
+            data='invalid json',
+            content_type='application/json'
+        )
+        
+        response = create_user(request)
+        self.assertEqual(response.status_code, 400)
+        
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['error'], 'Invalid JSON format')
+
+    def test_get_user_success(self):
+        """ユーザー取得API成功テスト"""
+        from django.test import RequestFactory
+        import json
+        
+        factory = RequestFactory()
+        request = factory.get(f'/api/users/{self.regular_user.id}/')
+        request.user = self.regular_user
+        
+        response = get_user(request, self.regular_user.id)
+        self.assertEqual(response.status_code, 200)
+        
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['id'], self.regular_user.id)
+        self.assertEqual(response_data['username'], 'regular')
+        self.assertEqual(response_data['email'], 'regular@example.com')
+
+    def test_get_user_not_found(self):
+        """ユーザー取得API存在しないユーザーエラーテスト"""
+        from django.test import RequestFactory
+        import json
+        
+        factory = RequestFactory()
+        request = factory.get('/api/users/99999/')
+        request.user = self.regular_user
+        
+        response = get_user(request, 99999)
+        self.assertEqual(response.status_code, 404)
+        
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['error'], 'User not found')
+
+    def test_update_user_success(self):
+        """ユーザー更新API成功テスト（自分自身）"""
+        from django.test import RequestFactory
+        import json
+        
+        factory = RequestFactory()
+        update_data = {'username': 'updated_regular', 'email': 'updated@example.com'}
+        request = factory.put(
+            f'/api/users/{self.regular_user.id}/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        request.user = self.regular_user
+        
+        response = update_user(request, self.regular_user.id)
+        self.assertEqual(response.status_code, 200)
+        
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['username'], 'updated_regular')
+        self.assertEqual(response_data['email'], 'updated@example.com')
+
+    def test_update_user_permission_denied(self):
+        """ユーザー更新API権限なしエラーテスト"""
+        from django.test import RequestFactory
+        import json
+        
+        factory = RequestFactory()
+        update_data = {'username': 'hacker'}
+        request = factory.put(
+            f'/api/users/{self.admin_user.id}/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        request.user = self.regular_user
+        
+        response = update_user(request, self.admin_user.id)
+        self.assertEqual(response.status_code, 403)
+        
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['error'], 'Permission denied')
+
+    def test_list_users_success_admin(self):
+        """ユーザー一覧API成功テスト（管理者）"""
+        from django.test import RequestFactory
+        import json
+        
+        factory = RequestFactory()
+        request = factory.get('/api/users/')
+        request.user = self.admin_user
+        
+        response = list_users(request)
+        self.assertEqual(response.status_code, 200)
+        
+        response_data = json.loads(response.content)
+        self.assertIsInstance(response_data, list)
+        self.assertGreaterEqual(len(response_data), 2)  # admin + regular
+
+    def test_delete_user_success_admin(self):
+        """ユーザー削除API成功テスト（管理者）"""
+        from django.test import RequestFactory
+        import json
+        
+        # 削除用テストユーザー作成
+        test_user = User.objects.create_user(
+            username='deleteme',
+            email='deleteme@example.com',
+            password='deletepass123'
+        )
+        
+        factory = RequestFactory()
+        request = factory.delete(f'/api/users/{test_user.id}/')
+        request.user = self.admin_user
+        
+        response = delete_user(request, test_user.id)
+        self.assertEqual(response.status_code, 200)
+        
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['result'], 'success')
+
+    def test_delete_user_self_error(self):
+        """ユーザー削除API自分自身削除エラーテスト"""
+        from django.test import RequestFactory
+        import json
+        
+        factory = RequestFactory()
+        request = factory.delete(f'/api/users/{self.admin_user.id}/')
+        request.user = self.admin_user
+        
+        response = delete_user(request, self.admin_user.id)
+        self.assertEqual(response.status_code, 400)
+        
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['error'], 'Cannot delete yourself')
+
+    def test_delete_user_not_found(self):
+        """ユーザー削除API存在しないユーザーエラーテスト"""
+        from django.test import RequestFactory
+        import json
+        
+        factory = RequestFactory()
+        request = factory.delete('/api/users/99999/')
+        request.user = self.admin_user
+        
+        response = delete_user(request, 99999)
+        self.assertEqual(response.status_code, 404)
+        
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['error'], 'User not found')
