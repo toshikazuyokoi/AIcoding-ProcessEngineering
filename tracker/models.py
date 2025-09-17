@@ -281,3 +281,41 @@ class Comment(models.Model):
             return True
         except Exception:
             return False
+
+
+class Notification(models.Model):
+    """
+    通知管理 - メール・画面通知
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Notification for {self.user.username}: {self.message[:50]}..."
+
+    def mark_as_read(self):
+        """既読化"""
+        self.is_read = True
+        self.save()
+        return True
+
+    @classmethod
+    def get_notifications(cls, user, unread_only=False):
+        """通知一覧取得"""
+        queryset = cls.objects.filter(user=user)
+        if unread_only:
+            queryset = queryset.filter(is_read=False)
+        return queryset
+
+    def delete_notification(self):
+        """通知削除"""
+        try:
+            self.delete()
+            return True
+        except Exception:
+            return False

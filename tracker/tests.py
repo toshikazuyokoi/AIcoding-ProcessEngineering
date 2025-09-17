@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.db.utils import IntegrityError
-from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment
+from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment, Notification
 
 User = get_user_model()
 
@@ -314,3 +314,84 @@ class CommentModelTest(TestCase):
         # コメントが削除されていることを確認
         with self.assertRaises(Comment.DoesNotExist):
             Comment.objects.get(id=comment_id)
+
+
+class NotificationModelTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.notification = Notification.objects.create(
+            user=self.user,
+            message='Test notification message',
+            is_read=False
+        )
+
+    def test_create_notification(self):
+        """通知作成テスト"""
+        self.assertEqual(self.notification.user, self.user)
+        self.assertEqual(self.notification.message, 'Test notification message')
+        self.assertFalse(self.notification.is_read)
+        self.assertIsNotNone(self.notification.created_at)
+
+    def test_mark_as_read(self):
+        """既読化テスト"""
+        result = self.notification.mark_as_read()
+        self.assertTrue(result)
+        
+        self.notification.refresh_from_db()
+        self.assertTrue(self.notification.is_read)
+
+    def test_get_notifications_all(self):
+        """通知一覧取得テスト（全件）"""
+        # 追加の通知を作成
+        Notification.objects.create(
+            user=self.user,
+            message='Second notification',
+            is_read=True
+        )
+        
+        notifications = Notification.get_notifications(self.user)
+        self.assertEqual(notifications.count(), 2)
+
+    def test_get_notifications_unread_only(self):
+        """通知一覧取得テスト（未読のみ）"""
+        # 追加の通知を作成（既読）
+        Notification.objects.create(
+            user=self.user,
+            message='Read notification',
+            is_read=True
+        )
+        
+        unread_notifications = Notification.get_notifications(self.user, unread_only=True)
+        self.assertEqual(unread_notifications.count(), 1)
+        self.assertFalse(unread_notifications.first().is_read)
+
+    def test_delete_notification(self):
+        """通知削除テスト"""
+        notification_id = self.notification.id
+        result = self.notification.delete_notification()
+        self.assertTrue(result)
+        
+        # 通知が削除されていることを確認
+        with self.assertRaises(Notification.DoesNotExist):
+            Notification.objects.get(id=notification_id)
+
+    def test_notification_ordering(self):
+        """通知の並び順テスト（新しい順）"""
+        # 追加の通知を作成
+        newer_notification = Notification.objects.create(
+            user=self.user,
+            message='Newer notification'
+        )
+        
+        notifications = Notification.objects.filter(user=self.user)
+        self.assertEqual(notifications.first(), newer_notification)
+        self.assertEqual(notifications.last(), self.notification)
+
+    def test_notification_str_representation(self):
+        """通知の文字列表現テスト"""
+        expected = f"Notification for {self.user.username}: {self.notification.message[:50]}..."
+        self.assertEqual(str(self.notification), expected)
