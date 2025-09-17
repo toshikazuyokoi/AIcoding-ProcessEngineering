@@ -319,3 +319,111 @@ class Notification(models.Model):
             return True
         except Exception:
             return False
+
+
+class SystemSettings(models.Model):
+    """
+    システム設定 - メンテナンスモードや送信元メールなどの全体設定
+    シングルトン（1レコード）のみを保持する。
+    """
+    maintenance_mode = models.BooleanField(default=False)
+    email_sender = models.EmailField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "System Settings"
+
+    def __str__(self):
+        return f"SystemSettings(maintenance_mode={self.maintenance_mode}, email_sender='{self.email_sender}')"
+
+    def save(self, *args, **kwargs):
+        """常にPK=1で保存し、他のレコードは削除して単一性を担保する"""
+        self.pk = 1
+        super().save(*args, **kwargs)
+        # 念のため他レコードを削除（競合防止の簡易策）
+        SystemSettings.objects.exclude(pk=self.pk).delete()
+        return None
+
+    @classmethod
+    def get_settings(cls):
+        """設定オブジェクトを取得（なければ作成）"""
+        obj, created = cls.objects.get_or_create(pk=1, defaults={})
+        return obj
+
+    @classmethod
+    def update_settings(cls, settings_data):
+        """設定更新して保存、更新後のオブジェクトを返却する"""
+        obj = cls.get_settings()
+        changed = False
+        for field, value in (settings_data or {}).items():
+            if hasattr(obj, field):
+                if getattr(obj, field) != value:
+                    setattr(obj, field, value)
+                    changed = True
+        if changed:
+            obj.save()
+        return obj
+
+
+class Statistics(models.Model):
+    """
+    統計情報 - プロジェクトごとのチケット統計
+    実際にはテーブルに保存せず、計算結果を返すビュー的なクラス
+    """
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    total_issues = models.IntegerField(default=0)
+    open_issues = models.IntegerField(default=0, db_column='open')
+    closed_issues = models.IntegerField(default=0, db_column='closed')
+    by_priority_json = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Statistics"
+        verbose_name_plural = "Statistics"
+
+    def __str__(self):
+        return f"Statistics(project={self.project.name}, total={self.total_issues}, open={self.open_issues}, closed={self.closed_issues})"
+
+    @property
+    def by_priority(self):
+        """優先度別集計をdictで返す"""
+        return self.by_priority_json or {}
+
+    @by_priority.setter
+    def by_priority(self, value):
+        """優先度別集計をJSONフィールドに保存"""
+        self.by_priority_json = value or {}
+
+    @classmethod
+    def get_statistics(cls, project_id):
+        """指定プロジェクトの統計情報を計算して返す"""
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return None
+
+        # Issue統計を計算
+        issues = Issue.objects.filter(project=project)
+        total_count = issues.count()
+        
+        # status別集計
+        open_statuses = ['open', 'in_progress']
+        closed_statuses = ['resolved', 'closed']
+        open_count = issues.filter(status__in=open_statuses).count()
+        closed_count = issues.filter(status__in=closed_statuses).count()
+        
+        # priority別集計
+        priority_counts = {}
+        for priority_choice in Issue.PRIORITY_CHOICES:
+            priority_key = priority_choice[0]
+            count = issues.filter(priority=priority_key).count()
+            if count > 0:
+                priority_counts[priority_key] = count
+
+        # Statisticsオブジェクトを作成（DBには保存しない）
+        stats = cls(
+            project=project,
+            total_issues=total_count,
+            open_issues=open_count,
+            closed_issues=closed_count,
+            by_priority_json=priority_counts
+        )
+        return stats

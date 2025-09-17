@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.db.utils import IntegrityError
-from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment, Notification
+from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment, Notification, SystemSettings, Statistics
 
 User = get_user_model()
 
@@ -395,3 +395,151 @@ class NotificationModelTest(TestCase):
         """通知の文字列表現テスト"""
         expected = f"Notification for {self.user.username}: {self.notification.message[:50]}..."
         self.assertEqual(str(self.notification), expected)
+
+
+class SystemSettingsModelTest(TestCase):
+    def test_get_settings_creates_singleton(self):
+        """get_settings は存在しない場合に作成し、単一オブジェクトを返す"""
+        settings1 = SystemSettings.get_settings()
+        self.assertIsInstance(settings1, SystemSettings)
+        self.assertEqual(settings1.pk, 1)
+
+        # 再取得しても同一PK
+        settings2 = SystemSettings.get_settings()
+        self.assertEqual(settings2.pk, 1)
+
+    def test_update_settings(self):
+        """update_settings でフィールド更新できる"""
+        updated = SystemSettings.update_settings({
+            'maintenance_mode': True,
+            'email_sender': 'noreply@example.com',
+        })
+        self.assertTrue(updated.maintenance_mode)
+        self.assertEqual(updated.email_sender, 'noreply@example.com')
+
+        # 変更なしでも呼び出し可能
+        again = SystemSettings.update_settings({
+            'maintenance_mode': True,
+            'email_sender': 'noreply@example.com',
+        })
+        self.assertEqual(again.pk, updated.pk)
+
+    def test_singleton_enforced_on_save(self):
+        """save 時に常に PK=1 に統一される（冗長対策）"""
+        s = SystemSettings(maintenance_mode=False, email_sender='a@example.com')
+        s.save()
+        self.assertEqual(s.pk, 1)
+        # 複数作成を試みても 1 つに収束
+        t = SystemSettings(maintenance_mode=True, email_sender='b@example.com')
+        t.save()
+        self.assertEqual(SystemSettings.objects.count(), 1)
+        self.assertEqual(SystemSettings.get_settings().email_sender, 'b@example.com')
+
+    def test_str_representation(self):
+        obj = SystemSettings.get_settings()
+        text = str(obj)
+        self.assertIn('SystemSettings(', text)
+
+
+class StatisticsModelTest(TestCase):
+    def setUp(self):
+        # ユーザーとプロジェクト作成
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.project = Project.objects.create(
+            name='Test Project',
+            description='Test Description',
+            created_by=self.user
+        )
+        
+        # テスト用のIssueを作成
+        self.issue1 = Issue.objects.create(
+            project=self.project,
+            title='Issue 1',
+            description='Description 1',
+            created_by=self.user,
+            status='open',
+            priority='high'
+        )
+        self.issue2 = Issue.objects.create(
+            project=self.project,
+            title='Issue 2',
+            description='Description 2',
+            created_by=self.user,
+            status='closed',
+            priority='medium'
+        )
+        self.issue3 = Issue.objects.create(
+            project=self.project,
+            title='Issue 3',
+            description='Description 3',
+            created_by=self.user,
+            status='in_progress',
+            priority='high'
+        )
+
+    def test_get_statistics_returns_correct_counts(self):
+        """get_statistics が正しい統計情報を返す"""
+        stats = Statistics.get_statistics(self.project.id)
+        
+        self.assertIsNotNone(stats)
+        self.assertEqual(stats.project, self.project)
+        self.assertEqual(stats.total_issues, 3)
+        self.assertEqual(stats.open_issues, 2)  # open + in_progress
+        self.assertEqual(stats.closed_issues, 1)  # closed
+
+    def test_get_statistics_priority_breakdown(self):
+        """get_statistics が優先度別統計を正しく返す"""
+        stats = Statistics.get_statistics(self.project.id)
+        
+        priority_counts = stats.by_priority
+        self.assertEqual(priority_counts['high'], 2)
+        self.assertEqual(priority_counts['medium'], 1)
+        self.assertNotIn('low', priority_counts)  # 0件のものは含まない
+
+    def test_get_statistics_nonexistent_project(self):
+        """存在しないプロジェクトIDでNoneを返す"""
+        stats = Statistics.get_statistics(99999)
+        self.assertIsNone(stats)
+
+    def test_get_statistics_empty_project(self):
+        """Issueがないプロジェクトで0統計を返す"""
+        empty_project = Project.objects.create(
+            name='Empty Project',
+            description='No issues',
+            created_by=self.user
+        )
+        
+        stats = Statistics.get_statistics(empty_project.id)
+        self.assertIsNotNone(stats)
+        self.assertEqual(stats.total_issues, 0)
+        self.assertEqual(stats.open_issues, 0)
+        self.assertEqual(stats.closed_issues, 0)
+        self.assertEqual(stats.by_priority, {})
+
+    def test_by_priority_property(self):
+        """by_priority プロパティが正しく動作する"""
+        stats = Statistics(
+            project=self.project,
+            by_priority_json={'high': 3, 'low': 1}
+        )
+        
+        # getter
+        self.assertEqual(stats.by_priority['high'], 3)
+        self.assertEqual(stats.by_priority['low'], 1)
+        
+        # setter
+        stats.by_priority = {'medium': 5}
+        self.assertEqual(stats.by_priority_json['medium'], 5)
+
+    def test_str_representation(self):
+        """Statistics の文字列表現をテスト"""
+        stats = Statistics.get_statistics(self.project.id)
+        text = str(stats)
+        
+        self.assertIn('Statistics(', text)
+        self.assertIn('Test Project', text)
+        self.assertIn('total=3', text)
