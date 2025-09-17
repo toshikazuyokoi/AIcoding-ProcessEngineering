@@ -4,6 +4,7 @@ from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment, Notification, SystemSettings, Statistics
 from tracker.services.user_service import UserService
+from tracker.services.issue_service import IssueService
 
 User = get_user_model()
 
@@ -761,3 +762,311 @@ class UserServiceTest(TestCase):
         """存在しないユーザーの統計取得テスト"""
         stats = UserService.get_user_statistics(99999)
         self.assertIsNone(stats)
+
+
+class IssueServiceTest(TestCase):
+    def setUp(self):
+        # テストデータ作成
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.user2 = User.objects.create_user(
+            username='testuser2',
+            email='test2@example.com',
+            password='testpass123'
+        )
+        self.project = Project.objects.create(
+            name='Test Project',
+            description='Test Description',
+            created_by=self.user
+        )
+        self.issue_data = {
+            'project_id': self.project.id,
+            'created_by_id': self.user.id,
+            'title': 'Test Issue',
+            'description': 'Test Description',
+            'priority': 'medium'
+        }
+
+    def test_create_issue_success(self):
+        """チケット作成成功テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        self.assertEqual(issue.title, 'Test Issue')
+        self.assertEqual(issue.project, self.project)
+        self.assertEqual(issue.created_by, self.user)
+        self.assertEqual(issue.priority, 'medium')
+        self.assertEqual(issue.status, 'open')  # デフォルト値
+
+    def test_create_issue_with_assigned_to(self):
+        """担当者付きチケット作成テスト"""
+        issue = IssueService.create_issue(
+            **self.issue_data,
+            assigned_to_id=self.user2.id
+        )
+        
+        self.assertEqual(issue.assigned_to, self.user2)
+
+    def test_create_issue_nonexistent_project(self):
+        """存在しないプロジェクトでのエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            IssueService.create_issue(
+                project_id=99999,
+                created_by_id=self.user.id,
+                title='Test',
+                description='Test'
+            )
+        self.assertIn('プロジェクトが存在しません', str(context.exception))
+
+    def test_create_issue_nonexistent_user(self):
+        """存在しない作成者でのエラーテスト"""
+        with self.assertRaises(ValidationError):
+            IssueService.create_issue(
+                project_id=self.project.id,
+                created_by_id=99999,
+                title='Test',
+                description='Test'
+            )
+
+    def test_create_issue_empty_title(self):
+        """空タイトルでのエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            IssueService.create_issue(
+                project_id=self.project.id,
+                created_by_id=self.user.id,
+                title='   ',  # 空白のみ
+                description='Test Description',
+                priority='medium'
+            )
+        self.assertIn('タイトルは必須です', str(context.exception))
+
+    def test_create_issue_invalid_priority(self):
+        """無効な優先度でのエラーテスト"""
+        with self.assertRaises(ValidationError):
+            IssueService.create_issue(
+                project_id=self.project.id,
+                created_by_id=self.user.id,
+                title='Test Issue',
+                description='Test Description',
+                priority='invalid_priority'
+            )
+
+    def test_get_issue_by_id(self):
+        """ID指定チケット取得テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        found_issue = IssueService.get_issue_by_id(issue.id)
+        self.assertEqual(found_issue.id, issue.id)
+        
+        # 存在しないID
+        not_found = IssueService.get_issue_by_id(99999)
+        self.assertIsNone(not_found)
+
+    def test_list_issues(self):
+        """チケット一覧取得テスト"""
+        issue1 = IssueService.create_issue(**self.issue_data)
+        issue2 = IssueService.create_issue(
+            project_id=self.project.id,
+            created_by_id=self.user.id,
+            title='Issue 2',
+            description='Test Description',
+            priority='medium',
+            assigned_to_id=self.user2.id
+        )
+        
+        # 全体一覧
+        all_issues = IssueService.list_issues()
+        self.assertEqual(all_issues.count(), 2)
+        
+        # プロジェクト指定
+        project_issues = IssueService.list_issues(project_id=self.project.id)
+        self.assertEqual(project_issues.count(), 2)
+        
+        # 担当者指定
+        assigned_issues = IssueService.list_issues(assigned_to_id=self.user2.id)
+        self.assertEqual(assigned_issues.count(), 1)
+        self.assertEqual(assigned_issues.first(), issue2)
+
+    def test_update_issue_success(self):
+        """チケット更新成功テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        updated_issue = IssueService.update_issue(
+            issue.id,
+            self.user.id,
+            title='Updated Title',
+            priority='high'
+        )
+        
+        self.assertEqual(updated_issue.title, 'Updated Title')
+        self.assertEqual(updated_issue.priority, 'high')
+        
+        # 履歴が作成されることを確認
+        history = IssueHistory.objects.filter(issue=issue)
+        self.assertEqual(history.count(), 2)  # title と priority の変更
+
+    def test_update_issue_assigned_to(self):
+        """担当者変更テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        updated_issue = IssueService.update_issue(
+            issue.id,
+            self.user.id,
+            assigned_to_id=self.user2.id
+        )
+        
+        self.assertEqual(updated_issue.assigned_to, self.user2)
+
+    def test_update_issue_nonexistent(self):
+        """存在しないチケット更新エラーテスト"""
+        with self.assertRaises(Issue.DoesNotExist):
+            IssueService.update_issue(99999, self.user.id, title='Test')
+
+    def test_change_status_success(self):
+        """ステータス変更成功テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        updated_issue = IssueService.change_status(
+            issue.id,
+            'in_progress',
+            self.user.id
+        )
+        
+        self.assertEqual(updated_issue.status, 'in_progress')
+        
+        # 履歴確認
+        history = IssueHistory.objects.filter(
+            issue=issue,
+            field_name='status'
+        ).first()
+        self.assertIsNotNone(history)
+        self.assertEqual(history.old_value, 'open')
+        self.assertEqual(history.new_value, 'in_progress')
+
+    def test_change_status_invalid(self):
+        """無効なステータス変更エラーテスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        with self.assertRaises(ValidationError):
+            IssueService.change_status(
+                issue.id,
+                'invalid_status',
+                self.user.id
+            )
+
+    def test_assign_issue_success(self):
+        """担当者変更成功テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        updated_issue = IssueService.assign_issue(
+            issue.id,
+            self.user2.id,
+            self.user.id
+        )
+        
+        self.assertEqual(updated_issue.assigned_to, self.user2)
+        
+        # 履歴確認
+        history = IssueHistory.objects.filter(
+            issue=issue,
+            field_name='assigned_to'
+        ).first()
+        self.assertIsNotNone(history)
+
+    def test_assign_issue_unassign(self):
+        """担当者解除テスト"""
+        issue = IssueService.create_issue(
+            **self.issue_data,
+            assigned_to_id=self.user2.id
+        )
+        
+        updated_issue = IssueService.assign_issue(
+            issue.id,
+            None,  # 未割当
+            self.user.id
+        )
+        
+        self.assertIsNone(updated_issue.assigned_to)
+
+    def test_delete_issue_success(self):
+        """チケット削除成功テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        issue_id = issue.id
+        
+        result = IssueService.delete_issue(issue_id, self.user.id)
+        self.assertTrue(result)
+        
+        # 削除確認
+        with self.assertRaises(Issue.DoesNotExist):
+            Issue.objects.get(id=issue_id)
+
+    def test_add_comment_success(self):
+        """コメント追加成功テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        comment = IssueService.add_comment(
+            issue.id,
+            self.user.id,
+            'Test comment'
+        )
+        
+        self.assertEqual(comment.issue, issue)
+        self.assertEqual(comment.user, self.user)
+        self.assertEqual(comment.content, 'Test comment')
+
+    def test_add_comment_empty(self):
+        """空コメント追加エラーテスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        with self.assertRaises(ValidationError) as context:
+            IssueService.add_comment(issue.id, self.user.id, '   ')
+        self.assertIn('コメント内容は必須です', str(context.exception))
+
+    def test_get_issue_history(self):
+        """チケット履歴取得テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        # 履歴を作るための変更
+        IssueService.change_status(issue.id, 'in_progress', self.user.id)
+        IssueService.assign_issue(issue.id, self.user2.id, self.user.id)
+        
+        history = IssueService.get_issue_history(issue.id)
+        self.assertEqual(history.count(), 2)  # status と assigned_to の変更
+
+    def test_get_issue_comments(self):
+        """チケットコメント取得テスト"""
+        issue = IssueService.create_issue(**self.issue_data)
+        
+        # コメント追加
+        IssueService.add_comment(issue.id, self.user.id, 'Comment 1')
+        IssueService.add_comment(issue.id, self.user2.id, 'Comment 2')
+        
+        comments = IssueService.get_issue_comments(issue.id)
+        self.assertEqual(comments.count(), 2)
+        self.assertEqual(comments.first().content, 'Comment 1')
+
+    def test_get_issue_statistics(self):
+        """チケット統計取得テスト"""
+        # テストデータ作成
+        IssueService.create_issue(**self.issue_data)  # medium, open
+        IssueService.create_issue(
+            project_id=self.project.id,
+            created_by_id=self.user.id,
+            title='Issue 2',
+            description='Test Description',
+            priority='high'
+        )
+        
+        # プロジェクト指定統計
+        project_stats = IssueService.get_issue_statistics(self.project.id)
+        self.assertIsNotNone(project_stats)
+        self.assertEqual(project_stats.total_issues, 2)
+        
+        # 全体統計
+        global_stats = IssueService.get_issue_statistics()
+        self.assertEqual(global_stats['total_issues'], 2)
+        self.assertEqual(global_stats['by_status']['open'], 2)
+        self.assertEqual(global_stats['by_priority']['medium'], 1)
+        self.assertEqual(global_stats['by_priority']['high'], 1)
