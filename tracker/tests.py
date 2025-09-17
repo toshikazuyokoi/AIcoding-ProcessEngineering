@@ -6,6 +6,7 @@ from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment,
 from tracker.services.user_service import UserService
 from tracker.services.issue_service import IssueService
 from tracker.services.notification_service import NotificationService
+from tracker.services.system_settings_service import SystemSettingsService
 
 User = get_user_model()
 
@@ -1319,3 +1320,139 @@ class NotificationServiceTest(TestCase):
         with self.assertRaises(ValidationError) as context:
             NotificationService.get_notification_statistics(99999)
         self.assertIn('指定されたユーザーが存在しません', str(context.exception))
+
+
+class SystemSettingsServiceTest(TestCase):
+    def setUp(self):
+        # 初期化（デフォルト値にリセット）
+        SystemSettingsService.reset_to_defaults()
+
+    def test_get_settings_default(self):
+        """デフォルト設定取得テスト"""
+        settings = SystemSettingsService.get_settings()
+        self.assertFalse(settings.maintenance_mode)
+        self.assertEqual(settings.email_sender, "")
+
+    def test_update_settings_success(self):
+        """設定更新成功テスト"""
+        updated = SystemSettingsService.update_settings(
+            maintenance_mode=True,
+            email_sender="admin@example.com"
+        )
+        self.assertTrue(updated.maintenance_mode)
+        self.assertEqual(updated.email_sender, "admin@example.com")
+
+    def test_update_settings_invalid_email(self):
+        """無効なメールアドレスでのエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            SystemSettingsService.update_settings(
+                email_sender="invalid-email"
+            )
+        self.assertIn("email_senderは有効なメールアドレス形式", str(context.exception))
+
+    def test_update_settings_invalid_maintenance_mode(self):
+        """maintenance_mode型不正エラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            SystemSettingsService.update_settings(
+                maintenance_mode="yes"
+            )
+        self.assertIn("maintenance_modeはboolean値", str(context.exception))
+
+    def test_update_settings_unknown_field(self):
+        """未知フィールドエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            SystemSettingsService.update_settings(
+                unknown_field=True
+            )
+        self.assertIn("未知の設定項目", str(context.exception))
+
+    def test_set_maintenance_mode(self):
+        """メンテナンスモード設定テスト"""
+        updated = SystemSettingsService.set_maintenance_mode(True)
+        self.assertTrue(updated.maintenance_mode)
+        updated = SystemSettingsService.set_maintenance_mode(False)
+        self.assertFalse(updated.maintenance_mode)
+
+    def test_set_email_sender(self):
+        """送信元メールアドレス設定テスト"""
+        updated = SystemSettingsService.set_email_sender("noreply@example.com")
+        self.assertEqual(updated.email_sender, "noreply@example.com")
+
+    def test_is_maintenance_mode(self):
+        """メンテナンスモード状態取得テスト"""
+        SystemSettingsService.set_maintenance_mode(True)
+        self.assertTrue(SystemSettingsService.is_maintenance_mode())
+        SystemSettingsService.set_maintenance_mode(False)
+        self.assertFalse(SystemSettingsService.is_maintenance_mode())
+
+    def test_get_email_sender(self):
+        """送信元メールアドレス取得テスト"""
+        SystemSettingsService.set_email_sender("info@example.com")
+        self.assertEqual(SystemSettingsService.get_email_sender(), "info@example.com")
+
+    def test_reset_to_defaults(self):
+        """デフォルト値リセットテスト"""
+        SystemSettingsService.update_settings(
+            maintenance_mode=True,
+            email_sender="admin@example.com"
+        )
+        reset = SystemSettingsService.reset_to_defaults()
+        self.assertFalse(reset.maintenance_mode)
+        self.assertEqual(reset.email_sender, "")
+
+    def test_validate_settings_success(self):
+        """バリデーション成功テスト"""
+        valid = SystemSettingsService.validate_settings({
+            "maintenance_mode": True,
+            "email_sender": "test@example.com"
+        })
+        self.assertTrue(valid)
+
+    def test_validate_settings_invalid(self):
+        """バリデーション失敗テスト"""
+        with self.assertRaises(ValidationError):
+            SystemSettingsService.validate_settings({
+                "maintenance_mode": "yes"
+            })
+        with self.assertRaises(ValidationError):
+            SystemSettingsService.validate_settings({
+                "email_sender": "invalid-email"
+            })
+        with self.assertRaises(ValidationError):
+            SystemSettingsService.validate_settings({
+                "unknown_field": True
+            })
+
+    def test_get_settings_dict(self):
+        """設定辞書取得テスト"""
+        SystemSettingsService.update_settings(
+            maintenance_mode=True,
+            email_sender="admin@example.com"
+        )
+        settings_dict = SystemSettingsService.get_settings_dict()
+        self.assertEqual(settings_dict["maintenance_mode"], True)
+        self.assertEqual(settings_dict["email_sender"], "admin@example.com")
+
+    def test_update_from_dict_success(self):
+        """辞書から設定更新成功テスト"""
+        result = SystemSettingsService.update_from_dict({
+            "maintenance_mode": True,
+            "email_sender": "admin@example.com"
+        })
+        self.assertEqual(result["maintenance_mode"], True)
+        self.assertEqual(result["email_sender"], "admin@example.com")
+
+    def test_update_from_dict_invalid(self):
+        """辞書から設定更新失敗テスト"""
+        with self.assertRaises(ValidationError):
+            SystemSettingsService.update_from_dict({
+                "maintenance_mode": "yes"
+            })
+        with self.assertRaises(ValidationError):
+            SystemSettingsService.update_from_dict({
+                "email_sender": "invalid-email"
+            })
+        with self.assertRaises(ValidationError):
+            SystemSettingsService.update_from_dict({
+                "unknown_field": True
+            })
