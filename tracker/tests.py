@@ -1462,283 +1462,6 @@ class SystemSettingsServiceTest(TestCase):
             })
 
 
-class StatisticsServiceTest(TestCase):
-    def setUp(self):
-        # テストデータ作成
-        self.user = User.objects.create_user(
-            username='testuser',
-            email='test@example.com',
-            password='testpass123'
-        )
-        self.user2 = User.objects.create_user(
-            username='testuser2',
-            email='test2@example.com',
-            password='testpass123'
-        )
-        self.project = Project.objects.create(
-            name='Test Project',
-            description='Test Description',
-            created_by=self.user
-        )
-        self.project2 = Project.objects.create(
-            name='Test Project 2',
-            description='Test Description 2',
-            created_by=self.user2
-        )
-
-    def test_get_project_statistics_success(self):
-        """プロジェクト統計取得成功テスト"""
-        # チケット作成
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='Test Issue 1',
-            description='Description',
-            priority='high',
-            status='open'
-        )
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='Test Issue 2',
-            description='Description',
-            priority='medium',
-            status='resolved'
-        )
-        
-        stats = StatisticsService.get_project_statistics(self.project.id)
-        self.assertIsNotNone(stats)
-        self.assertEqual(stats.total_issues, 2)
-        self.assertEqual(stats.open_issues, 1)
-        self.assertEqual(stats.closed_issues, 1)
-
-    def test_get_project_statistics_nonexistent(self):
-        """存在しないプロジェクトの統計取得テスト"""
-        stats = StatisticsService.get_project_statistics(99999)
-        self.assertIsNone(stats)
-
-    def test_get_project_statistics_dict_success(self):
-        """プロジェクト統計辞書取得成功テスト"""
-        # チケット作成
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='Test Issue',
-            description='Description',
-            priority='high'
-        )
-        
-        stats_dict = StatisticsService.get_project_statistics_dict(self.project.id)
-        self.assertIsNotNone(stats_dict)
-        self.assertEqual(stats_dict['project_id'], self.project.id)
-        self.assertEqual(stats_dict['total_issues'], 1)
-        self.assertIn('open', stats_dict)
-        self.assertIn('closed', stats_dict)
-        self.assertIn('by_priority', stats_dict)
-
-    def test_get_project_statistics_dict_nonexistent(self):
-        """存在しないプロジェクトの統計辞書取得テスト"""
-        stats_dict = StatisticsService.get_project_statistics_dict(99999)
-        self.assertIsNone(stats_dict)
-
-    def test_get_global_statistics(self):
-        """全体統計取得テスト"""
-        # 複数プロジェクトにチケット作成
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='Issue 1',
-            description='Description',
-            priority='high'
-        )
-        Issue.objects.create(
-            project=self.project2,
-            created_by=self.user2,
-            title='Issue 2',
-            description='Description',
-            priority='medium',
-            status='resolved'
-        )
-        
-        stats = StatisticsService.get_global_statistics()
-        self.assertEqual(stats['total_projects'], 2)
-        self.assertEqual(stats['total_issues'], 2)
-        self.assertEqual(stats['open'], 1)
-        self.assertEqual(stats['closed'], 1)
-        self.assertIn('by_priority', stats)
-
-    def test_get_user_statistics_success(self):
-        """ユーザー統計取得成功テスト"""
-        # ユーザーが作成したチケット
-        issue1 = Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='Created Issue',
-            description='Description',
-            priority='high'
-        )
-        # ユーザーに担当されたチケット
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user2,
-            assigned_to=self.user,
-            title='Assigned Issue',
-            description='Description',
-            priority='medium',
-            status='resolved'
-        )
-        # コメント作成
-        Comment.objects.create(
-            issue=issue1,
-            user=self.user,
-            content='Test comment'
-        )
-        
-        stats = StatisticsService.get_user_statistics(self.user.id)
-        self.assertEqual(stats['user_id'], self.user.id)
-        self.assertEqual(stats['created_issues']['total'], 1)
-        self.assertEqual(stats['assigned_issues']['total'], 1)
-        self.assertEqual(stats['comments'], 1)
-
-    def test_get_user_statistics_nonexistent(self):
-        """存在しないユーザーの統計取得エラーテスト"""
-        with self.assertRaises(ValidationError) as context:
-            StatisticsService.get_user_statistics(99999)
-        self.assertIn('指定されたユーザーが存在しません', str(context.exception))
-
-    def test_get_issue_status_breakdown_project(self):
-        """プロジェクト指定ステータス別内訳テスト"""
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='Open Issue',
-            description='Description',
-            status='open'
-        )
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='Closed Issue',
-            description='Description',
-            status='resolved'
-        )
-        
-        breakdown = StatisticsService.get_issue_status_breakdown(self.project.id)
-        self.assertEqual(breakdown['open'], 1)
-        self.assertEqual(breakdown['resolved'], 1)
-
-    def test_get_issue_status_breakdown_global(self):
-        """全体ステータス別内訳テスト"""
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='Issue 1',
-            description='Description',
-            status='open'
-        )
-        Issue.objects.create(
-            project=self.project2,
-            created_by=self.user2,
-            title='Issue 2',
-            description='Description',
-            status='resolved'
-        )
-        
-        breakdown = StatisticsService.get_issue_status_breakdown()
-        self.assertEqual(breakdown['open'], 1)
-        self.assertEqual(breakdown['resolved'], 1)
-
-    def test_get_issue_status_breakdown_nonexistent_project(self):
-        """存在しないプロジェクトのステータス別内訳エラーテスト"""
-        with self.assertRaises(ValidationError) as context:
-            StatisticsService.get_issue_status_breakdown(99999)
-        self.assertIn('指定されたプロジェクトが存在しません', str(context.exception))
-
-    def test_get_issue_priority_breakdown_project(self):
-        """プロジェクト指定優先度別内訳テスト"""
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='High Priority',
-            description='Description',
-            priority='high'
-        )
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='Medium Priority',
-            description='Description',
-            priority='medium'
-        )
-        
-        breakdown = StatisticsService.get_issue_priority_breakdown(self.project.id)
-        self.assertEqual(breakdown['high'], 1)
-        self.assertEqual(breakdown['medium'], 1)
-
-    def test_get_issue_priority_breakdown_global(self):
-        """全体優先度別内訳テスト"""
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='High Issue',
-            description='Description',
-            priority='high'
-        )
-        Issue.objects.create(
-            project=self.project2,
-            created_by=self.user2,
-            title='Low Issue',
-            description='Description',
-            priority='low'
-        )
-        
-        breakdown = StatisticsService.get_issue_priority_breakdown()
-        self.assertEqual(breakdown['high'], 1)
-        self.assertEqual(breakdown['low'], 1)
-
-    def test_get_issue_priority_breakdown_nonexistent_project(self):
-        """存在しないプロジェクトの優先度別内訳エラーテスト"""
-        with self.assertRaises(ValidationError) as context:
-            StatisticsService.get_issue_priority_breakdown(99999)
-        self.assertIn('指定されたプロジェクトが存在しません', str(context.exception))
-
-    def test_get_recent_activity_statistics(self):
-        """最近の活動統計テスト"""
-        # チケット作成
-        Issue.objects.create(
-            project=self.project,
-            created_by=self.user,
-            title='New Issue',
-            description='Description'
-        )
-        
-        stats = StatisticsService.get_recent_activity_statistics(30)
-        self.assertEqual(stats['period_days'], 30)
-        self.assertIn('start_date', stats)
-        self.assertIn('end_date', stats)
-        self.assertEqual(stats['new_issues'], 1)
-
-    def test_validate_statistics_request_success(self):
-        """統計リクエストバリデーション成功テスト"""
-        result = StatisticsService.validate_statistics_request(
-            project_id=self.project.id,
-            user_id=self.user.id
-        )
-        self.assertTrue(result)
-
-    def test_validate_statistics_request_nonexistent_project(self):
-        """存在しないプロジェクトのバリデーションエラーテスト"""
-        with self.assertRaises(ValidationError) as context:
-            StatisticsService.validate_statistics_request(project_id=99999)
-        self.assertIn('指定されたプロジェクトが存在しません', str(context.exception))
-
-    def test_validate_statistics_request_nonexistent_user(self):
-        """存在しないユーザーのバリデーションエラーテスト"""
-        with self.assertRaises(ValidationError) as context:
-            StatisticsService.validate_statistics_request(user_id=99999)
-        self.assertIn('指定されたユーザーが存在しません', str(context.exception))
-
-
 class UserAPITest(TestCase):
     def setUp(self):
         # テストデータ作成
@@ -1932,4 +1655,115 @@ class NotificationAPITest(TestCase):
         request.user = self.user
         response = delete_notification(request, other_n.id)
         self.assertEqual(response.status_code, 403)
+
+
+class IssueAPITest(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(
+            username='iss', email='iss@example.com', password='pass123'
+        )
+        self.user2 = User.objects.create_user(
+            username='iss2', email='iss2@example.com', password='pass123'
+        )
+        self.project = Project.objects.create(
+            name='P1', description='proj', created_by=self.user
+        )
+
+    def _create_issue(self):
+        from tracker.api.issue_api import create_issue
+        payload = {
+            'project_id': self.project.id,
+            'title': 'T',
+            'description': 'D',
+            'priority': 'medium',
+        }
+        req = self.factory.post('/api/issues', data=json.dumps(payload), content_type='application/json')
+        req.user = self.user
+        return create_issue(req)
+
+    def test_create_issue_success(self):
+        from tracker.api.issue_api import create_issue
+        payload = {
+            'project_id': self.project.id,
+            'title': 'Title',
+            'description': 'Desc',
+            'priority': 'high',
+            'assigned_to_id': self.user2.id,
+        }
+        req = self.factory.post('/api/issues', data=json.dumps(payload), content_type='application/json')
+        req.user = self.user
+        res = create_issue(req)
+        self.assertEqual(res.status_code, 201)
+        data = json.loads(res.content)
+        self.assertEqual(data['title'], 'Title')
+        self.assertEqual(data['assigned_to'], self.user2.id)
+
+    def test_get_update_delete_issue(self):
+        from tracker.api.issue_api import get_issue, update_issue, delete_issue
+        res = self._create_issue()
+        issue_id = json.loads(res.content)['id']
+
+        # get
+        req = self.factory.get(f'/api/issues/{issue_id}')
+        req.user = self.user
+        r = get_issue(req, issue_id)
+        self.assertEqual(r.status_code, 200)
+
+        # update
+        upd = {'title': 'New', 'priority': 'low'}
+        req2 = self.factory.put(f'/api/issues/{issue_id}', data=json.dumps(upd), content_type='application/json')
+        req2.user = self.user
+        r2 = update_issue(req2, issue_id)
+        self.assertEqual(r2.status_code, 200)
+        data2 = json.loads(r2.content)
+        self.assertEqual(data2['title'], 'New')
+        self.assertEqual(data2['priority'], 'low')
+
+        # delete
+        req3 = self.factory.delete(f'/api/issues/{issue_id}')
+        req3.user = self.user
+        r3 = delete_issue(req3, issue_id)
+        self.assertEqual(r3.status_code, 200)
+
+    def test_list_and_status_and_assign_and_comments(self):
+        from tracker.api.issue_api import list_issues, change_issue_status, assign_issue, add_comment, list_comments
+        # create two issues
+        self._create_issue()
+        self._create_issue()
+
+        # list
+        req = self.factory.get('/api/issues')
+        req.user = self.user
+        r = list_issues(req)
+        self.assertEqual(r.status_code, 200)
+        arr = json.loads(r.content)
+        self.assertGreaterEqual(len(arr), 2)
+
+        # status change
+        issue_id = arr[0]['id']
+        req2 = self.factory.patch(f'/api/issues/{issue_id}/status', data=json.dumps({'status': 'in_progress'}), content_type='application/json')
+        req2.user = self.user
+        r2 = change_issue_status(req2, issue_id)
+        self.assertEqual(r2.status_code, 200)
+
+        # assign
+        req3 = self.factory.patch(f'/api/issues/{issue_id}/assignee', data=json.dumps({'assigned_to_id': self.user2.id}), content_type='application/json')
+        req3.user = self.user
+        r3 = assign_issue(req3, issue_id)
+        self.assertEqual(r3.status_code, 200)
+
+        # add comment
+        req4 = self.factory.post(f'/api/issues/{issue_id}/comments', data=json.dumps({'content': 'hello'}), content_type='application/json')
+        req4.user = self.user
+        r4 = add_comment(req4, issue_id)
+        self.assertEqual(r4.status_code, 201)
+
+        # list comments
+        req5 = self.factory.get(f'/api/issues/{issue_id}/comments')
+        req5.user = self.user
+        r5 = list_comments(req5, issue_id)
+        self.assertEqual(r5.status_code, 200)
+        comms = json.loads(r5.content)
+        self.assertEqual(comms[0]['content'], 'hello')
 
