@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment, Notification, SystemSettings, Statistics
 from tracker.services.user_service import UserService
 from tracker.services.issue_service import IssueService
+from tracker.services.notification_service import NotificationService
 
 User = get_user_model()
 
@@ -1070,3 +1071,251 @@ class IssueServiceTest(TestCase):
         self.assertEqual(global_stats['by_status']['open'], 2)
         self.assertEqual(global_stats['by_priority']['medium'], 1)
         self.assertEqual(global_stats['by_priority']['high'], 1)
+
+
+class NotificationServiceTest(TestCase):
+    def setUp(self):
+        # テストデータ作成
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.user2 = User.objects.create_user(
+            username='testuser2',
+            email='test2@example.com',
+            password='testpass123'
+        )
+        self.notification_message = "これはテスト通知です"
+
+    def test_create_notification_success(self):
+        """通知作成成功テスト"""
+        notification = NotificationService.create_notification(
+            self.user.id,
+            self.notification_message
+        )
+        
+        self.assertEqual(notification.user, self.user)
+        self.assertEqual(notification.message, self.notification_message)
+        self.assertFalse(notification.is_read)
+        self.assertIsNotNone(notification.created_at)
+
+    def test_create_notification_nonexistent_user(self):
+        """存在しないユーザーでのエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.create_notification(99999, self.notification_message)
+        self.assertIn('指定されたユーザーが存在しません', str(context.exception))
+
+    def test_create_notification_empty_message(self):
+        """空メッセージでのエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.create_notification(self.user.id, '   ')
+        self.assertIn('通知メッセージは必須です', str(context.exception))
+
+    def test_get_notifications_success(self):
+        """通知一覧取得成功テスト"""
+        # テストデータ作成
+        notification1 = NotificationService.create_notification(
+            self.user.id, "通知1"
+        )
+        notification2 = NotificationService.create_notification(
+            self.user.id, "通知2"
+        )
+        # 他のユーザーの通知も作成
+        NotificationService.create_notification(
+            self.user2.id, "他のユーザー通知"
+        )
+        
+        # 全通知取得
+        notifications = NotificationService.get_notifications(self.user.id)
+        self.assertEqual(notifications.count(), 2)
+        
+        # 未読のみ取得
+        unread_notifications = NotificationService.get_notifications(
+            self.user.id, unread_only=True
+        )
+        self.assertEqual(unread_notifications.count(), 2)
+
+    def test_get_notifications_nonexistent_user(self):
+        """存在しないユーザーでのエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.get_notifications(99999)
+        self.assertIn('指定されたユーザーが存在しません', str(context.exception))
+
+    def test_get_notification_by_id(self):
+        """ID指定通知取得テスト"""
+        notification = NotificationService.create_notification(
+            self.user.id, self.notification_message
+        )
+        
+        found_notification = NotificationService.get_notification_by_id(notification.id)
+        self.assertEqual(found_notification.id, notification.id)
+        
+        # 存在しないID
+        not_found = NotificationService.get_notification_by_id(99999)
+        self.assertIsNone(not_found)
+
+    def test_mark_as_read_success(self):
+        """通知既読化成功テスト"""
+        notification = NotificationService.create_notification(
+            self.user.id, self.notification_message
+        )
+        
+        # 既読化実行
+        updated_notification = NotificationService.mark_as_read(notification.id)
+        self.assertTrue(updated_notification.is_read)
+        
+        # 既に既読の場合
+        already_read = NotificationService.mark_as_read(notification.id)
+        self.assertTrue(already_read.is_read)
+
+    def test_mark_as_read_nonexistent(self):
+        """存在しない通知の既読化エラーテスト"""
+        with self.assertRaises(Notification.DoesNotExist):
+            NotificationService.mark_as_read(99999)
+
+    def test_mark_all_as_read_success(self):
+        """全通知既読化成功テスト"""
+        # 複数の通知を作成
+        NotificationService.create_notification(self.user.id, "通知1")
+        NotificationService.create_notification(self.user.id, "通知2")
+        NotificationService.create_notification(self.user.id, "通知3")
+        
+        # 全て既読化
+        updated_count = NotificationService.mark_all_as_read(self.user.id)
+        self.assertEqual(updated_count, 3)
+        
+        # 確認
+        unread_count = NotificationService.get_unread_count(self.user.id)
+        self.assertEqual(unread_count, 0)
+
+    def test_mark_all_as_read_nonexistent_user(self):
+        """存在しないユーザーの全既読化エラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.mark_all_as_read(99999)
+        self.assertIn('指定されたユーザーが存在しません', str(context.exception))
+
+    def test_delete_notification_success(self):
+        """通知削除成功テスト"""
+        notification = NotificationService.create_notification(
+            self.user.id, self.notification_message
+        )
+        notification_id = notification.id
+        
+        # 削除実行
+        result = NotificationService.delete_notification(notification_id, self.user.id)
+        self.assertTrue(result)
+        
+        # 削除確認
+        deleted_notification = NotificationService.get_notification_by_id(notification_id)
+        self.assertIsNone(deleted_notification)
+
+    def test_delete_notification_permission_denied(self):
+        """権限なしでの削除エラーテスト"""
+        notification = NotificationService.create_notification(
+            self.user.id, self.notification_message
+        )
+        
+        # 他のユーザーでの削除試行
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.delete_notification(notification.id, self.user2.id)
+        self.assertIn('この通知を削除する権限がありません', str(context.exception))
+
+    def test_delete_notification_nonexistent(self):
+        """存在しない通知の削除エラーテスト"""
+        with self.assertRaises(Notification.DoesNotExist):
+            NotificationService.delete_notification(99999)
+
+    def test_get_unread_count(self):
+        """未読通知数取得テスト"""
+        # 通知作成
+        NotificationService.create_notification(self.user.id, "通知1")
+        NotificationService.create_notification(self.user.id, "通知2")
+        notification3 = NotificationService.create_notification(self.user.id, "通知3")
+        
+        # 初期状態（全て未読）
+        unread_count = NotificationService.get_unread_count(self.user.id)
+        self.assertEqual(unread_count, 3)
+        
+        # 1つ既読化
+        NotificationService.mark_as_read(notification3.id)
+        unread_count = NotificationService.get_unread_count(self.user.id)
+        self.assertEqual(unread_count, 2)
+
+    def test_get_unread_count_nonexistent_user(self):
+        """存在しないユーザーの未読数取得エラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.get_unread_count(99999)
+        self.assertIn('指定されたユーザーが存在しません', str(context.exception))
+
+    def test_bulk_create_notifications_success(self):
+        """一括通知作成成功テスト"""
+        user_ids = [self.user.id, self.user2.id]
+        message = "一括通知テスト"
+        
+        notifications = NotificationService.bulk_create_notifications(user_ids, message)
+        self.assertEqual(len(notifications), 2)
+        
+        # 各ユーザーの通知を確認
+        user1_notifications = NotificationService.get_notifications(self.user.id)
+        user2_notifications = NotificationService.get_notifications(self.user2.id)
+        self.assertEqual(user1_notifications.count(), 1)
+        self.assertEqual(user2_notifications.count(), 1)
+
+    def test_bulk_create_notifications_empty_message(self):
+        """一括通知作成空メッセージエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.bulk_create_notifications([self.user.id], '   ')
+        self.assertIn('通知メッセージは必須です', str(context.exception))
+
+    def test_bulk_create_notifications_empty_users(self):
+        """一括通知作成ユーザーなしエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.bulk_create_notifications([], "テスト通知")
+        self.assertIn('通知対象ユーザーが指定されていません', str(context.exception))
+
+    def test_bulk_create_notifications_invalid_users(self):
+        """一括通知作成無効ユーザーエラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.bulk_create_notifications(
+                [self.user.id, 99999], "テスト通知"
+            )
+        self.assertIn('存在しないユーザーID', str(context.exception))
+
+    def test_get_notification_statistics_user_specific(self):
+        """ユーザー固有通知統計取得テスト"""
+        # ユーザー1の通知
+        NotificationService.create_notification(self.user.id, "通知1")
+        notification2 = NotificationService.create_notification(self.user.id, "通知2")
+        NotificationService.mark_as_read(notification2.id)
+        
+        # ユーザー2の通知
+        NotificationService.create_notification(self.user2.id, "通知3")
+        
+        # ユーザー1の統計
+        stats = NotificationService.get_notification_statistics(self.user.id)
+        self.assertEqual(stats['total_notifications'], 2)
+        self.assertEqual(stats['unread_notifications'], 1)
+        self.assertEqual(stats['read_notifications'], 1)
+        self.assertEqual(stats['unread_percentage'], 50.0)
+
+    def test_get_notification_statistics_global(self):
+        """全体通知統計取得テスト"""
+        # 複数ユーザーの通知作成
+        NotificationService.create_notification(self.user.id, "通知1")
+        notification2 = NotificationService.create_notification(self.user.id, "通知2")
+        NotificationService.create_notification(self.user2.id, "通知3")
+        NotificationService.mark_as_read(notification2.id)
+        
+        # 全体統計
+        stats = NotificationService.get_notification_statistics()
+        self.assertEqual(stats['total_notifications'], 3)
+        self.assertEqual(stats['unread_notifications'], 2)
+        self.assertEqual(stats['read_notifications'], 1)
+        self.assertAlmostEqual(stats['unread_percentage'], 66.67, places=1)
+
+    def test_get_notification_statistics_nonexistent_user(self):
+        """存在しないユーザーの統計取得エラーテスト"""
+        with self.assertRaises(ValidationError) as context:
+            NotificationService.get_notification_statistics(99999)
+        self.assertIn('指定されたユーザーが存在しません', str(context.exception))
