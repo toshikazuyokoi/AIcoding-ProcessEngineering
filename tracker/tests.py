@@ -1,7 +1,9 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.db.utils import IntegrityError
+from django.core.exceptions import ValidationError
 from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment, Notification, SystemSettings, Statistics
+from tracker.services.user_service import UserService
 
 User = get_user_model()
 
@@ -543,3 +545,219 @@ class StatisticsModelTest(TestCase):
         self.assertIn('Statistics(', text)
         self.assertIn('Test Project', text)
         self.assertIn('total=3', text)
+
+
+class UserServiceTest(TestCase):
+    def setUp(self):
+        self.user_data = {
+            'username': 'testuser',
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+
+    def test_create_user_success(self):
+        """ユーザー作成成功テスト"""
+        user = UserService.create_user(**self.user_data)
+        
+        self.assertEqual(user.username, 'testuser')
+        self.assertEqual(user.email, 'test@example.com')
+        self.assertTrue(user.check_password('testpass123'))
+        self.assertIsNotNone(user.created_at)
+
+    def test_create_user_with_extra_fields(self):
+        """追加フィールド付きユーザー作成テスト"""
+        user = UserService.create_user(
+            **self.user_data,
+            first_name='Test',
+            last_name='User'
+        )
+        
+        self.assertEqual(user.first_name, 'Test')
+        self.assertEqual(user.last_name, 'User')
+
+    def test_create_user_duplicate_email(self):
+        """重複メールアドレスでのエラーテスト"""
+        # 最初のユーザー作成
+        UserService.create_user(**self.user_data)
+        
+        # 同じメールアドレスで2回目作成
+        with self.assertRaises(ValidationError) as context:
+            UserService.create_user(
+                username='testuser2',
+                email='test@example.com',  # 重複
+                password='testpass123'
+            )
+        self.assertIn('既に使用されています', str(context.exception))
+
+    def test_create_user_duplicate_username(self):
+        """重複ユーザー名でのエラーテスト"""
+        # 最初のユーザー作成
+        UserService.create_user(**self.user_data)
+        
+        # 同じユーザー名で2回目作成
+        with self.assertRaises(ValidationError):
+            UserService.create_user(
+                username='testuser',  # 重複
+                email='test2@example.com',
+                password='testpass123'
+            )
+
+    def test_update_user_success(self):
+        """ユーザー更新成功テスト"""
+        user = UserService.create_user(**self.user_data)
+        
+        updated_user = UserService.update_user(
+            user.id,
+            first_name='Updated',
+            last_name='Name'
+        )
+        
+        self.assertEqual(updated_user.first_name, 'Updated')
+        self.assertEqual(updated_user.last_name, 'Name')
+        self.assertEqual(updated_user.id, user.id)
+
+    def test_update_user_email_duplicate(self):
+        """更新時のメール重複エラーテスト"""
+        user1 = UserService.create_user(**self.user_data)
+        user2 = UserService.create_user(
+            username='user2',
+            email='user2@example.com',
+            password='pass123'
+        )
+        
+        # user2のメールをuser1のメールに変更しようとする
+        with self.assertRaises(ValidationError):
+            UserService.update_user(user2.id, email='test@example.com')
+
+    def test_update_user_nonexistent(self):
+        """存在しないユーザー更新エラーテスト"""
+        with self.assertRaises(User.DoesNotExist):
+            UserService.update_user(99999, first_name='Test')
+
+    def test_delete_user_success(self):
+        """ユーザー削除成功テスト"""
+        user = UserService.create_user(**self.user_data)
+        user_id = user.id
+        
+        result = UserService.delete_user(user_id)
+        self.assertTrue(result)
+        
+        # 削除確認
+        with self.assertRaises(User.DoesNotExist):
+            User.objects.get(id=user_id)
+
+    def test_delete_user_with_projects(self):
+        """プロジェクト作成者削除エラーテスト"""
+        user = UserService.create_user(**self.user_data)
+        
+        # プロジェクト作成
+        Project.objects.create(
+            name='Test Project',
+            description='Test',
+            created_by=user
+        )
+        
+        # 削除試行
+        with self.assertRaises(ValidationError) as context:
+            UserService.delete_user(user.id)
+        self.assertIn('削除できません', str(context.exception))
+
+    def test_get_user_by_id(self):
+        """ID指定ユーザー取得テスト"""
+        user = UserService.create_user(**self.user_data)
+        
+        found_user = UserService.get_user_by_id(user.id)
+        self.assertEqual(found_user.id, user.id)
+        
+        # 存在しないID
+        not_found = UserService.get_user_by_id(99999)
+        self.assertIsNone(not_found)
+
+    def test_get_user_by_email(self):
+        """メール指定ユーザー取得テスト"""
+        user = UserService.create_user(**self.user_data)
+        
+        found_user = UserService.get_user_by_email('test@example.com')
+        self.assertEqual(found_user.email, user.email)
+        
+        # 存在しないメール
+        not_found = UserService.get_user_by_email('notfound@example.com')
+        self.assertIsNone(not_found)
+
+    def test_authenticate_user_success(self):
+        """認証成功テスト"""
+        user = UserService.create_user(**self.user_data)
+        
+        authenticated = UserService.authenticate_user(
+            'test@example.com',
+            'testpass123'
+        )
+        self.assertEqual(authenticated.id, user.id)
+
+    def test_authenticate_user_wrong_password(self):
+        """認証失敗（間違いパスワード）テスト"""
+        UserService.create_user(**self.user_data)
+        
+        authenticated = UserService.authenticate_user(
+            'test@example.com',
+            'wrongpass'
+        )
+        self.assertIsNone(authenticated)
+
+    def test_authenticate_user_nonexistent_email(self):
+        """認証失敗（存在しないメール）テスト"""
+        authenticated = UserService.authenticate_user(
+            'notfound@example.com',
+            'testpass123'
+        )
+        self.assertIsNone(authenticated)
+
+    def test_list_users(self):
+        """ユーザー一覧取得テスト"""
+        user1 = UserService.create_user(**self.user_data)
+        user2 = UserService.create_user(
+            username='user2',
+            email='user2@example.com',
+            password='pass123'
+        )
+        
+        users = UserService.list_users()
+        self.assertEqual(users.count(), 2)
+        self.assertIn(user1, users)
+        self.assertIn(user2, users)
+
+    def test_get_user_statistics(self):
+        """ユーザー統計取得テスト"""
+        user = UserService.create_user(**self.user_data)
+        
+        # プロジェクト作成
+        project = Project.objects.create(
+            name='Test Project',
+            created_by=user
+        )
+        
+        # チケット作成
+        Issue.objects.create(
+            project=project,
+            title='Test Issue',
+            description='Test',
+            created_by=user
+        )
+        
+        # 通知作成
+        Notification.objects.create(
+            user=user,
+            message='Test notification'
+        )
+        
+        stats = UserService.get_user_statistics(user.id)
+        
+        self.assertEqual(stats['created_projects_count'], 1)
+        self.assertEqual(stats['created_issues_count'], 1)
+        self.assertEqual(stats['total_notifications'], 1)
+        self.assertEqual(stats['unread_notifications'], 1)
+
+    def test_get_user_statistics_nonexistent(self):
+        """存在しないユーザーの統計取得テスト"""
+        stats = UserService.get_user_statistics(99999)
+        self.assertIsNone(stats)
