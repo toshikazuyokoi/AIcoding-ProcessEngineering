@@ -17,6 +17,45 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
+# API imports
+from tracker.api.user_api import create_user, get_user, update_user, list_users, delete_user
+from tracker.api.issue_api import (
+    create_issue, get_issue, update_issue, list_issues, delete_issue,
+    change_issue_status, add_comment, list_comments, assign_issue
+)
+from tracker.api.notification_api import list_notifications, mark_notification_read, delete_notification
+from tracker.api.statistics_api import get_project_statistics
+from tracker.api.system_settings_api import system_settings_api
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # User API endpoints
+    path('api/users/', create_user, name='api_create_user'),  # POST
+    path('api/users/', list_users, name='api_list_users'),    # GET (staff only)
+    path('api/users/<int:user_id>/', get_user, name='api_get_user'),        # GET
+    path('api/users/<int:user_id>/', update_user, name='api_update_user'),   # PUT
+    path('api/users/<int:user_id>/', delete_user, name='api_delete_user'),   # DELETE (staff only)
+    
+    # Issue API endpoints
+    path('api/issues/', create_issue, name='api_create_issue'),              # POST
+    path('api/issues/', list_issues, name='api_list_issues'),                # GET
+    path('api/issues/<int:issue_id>/', get_issue, name='api_get_issue'),     # GET
+    path('api/issues/<int:issue_id>/', update_issue, name='api_update_issue'), # PUT
+    path('api/issues/<int:issue_id>/', delete_issue, name='api_delete_issue'), # DELETE
+    path('api/issues/<int:issue_id>/status/', change_issue_status, name='api_change_issue_status'), # PATCH
+    path('api/issues/<int:issue_id>/comments/', add_comment, name='api_add_comment'),               # POST
+    path('api/issues/<int:issue_id>/comments/', list_comments, name='api_list_comments'),           # GET
+    path('api/issues/<int:issue_id>/assignee/', assign_issue, name='api_assign_issue'),             # PATCH
+    
+    # Notification API endpoints
+    path('api/notifications/', list_notifications, name='api_list_notifications'),                      # GET
+    path('api/notifications/<int:notification_id>/read/', mark_notification_read, name='api_mark_notification_read'), # PATCH
+    path('api/notifications/<int:notification_id>/', delete_notification, name='api_delete_notification'),            # DELETE
+    
+    # Statistics API endpoints
+    path('api/projects/<int:project_id>/stats/', get_project_statistics, name='api_get_project_statistics'), # GET
+    
+    # SystemSettings API endpoints
+    path('api/settings/', system_settings_api, name='api_system_settings'), # GET, PUT
 ]
