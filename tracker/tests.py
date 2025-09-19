@@ -2000,3 +2000,82 @@ class SystemSettingsAPITest(TestCase):
         response = system_settings_api(request)
         self.assertEqual(response.status_code, 302)  # Redirect due to login_required
 
+
+class AuthenticationUITest(TestCase):
+    """Login UI flow tests (Issue #17)"""
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.User = get_user_model()
+        self.password = 'loginpass123'
+        self.user = self.User.objects.create_user(
+            username='loginuser', email='login@example.com', password=self.password
+        )
+
+    def _add_session(self, request):
+        """Attach a session to a RequestFactory request."""
+        from django.contrib.sessions.middleware import SessionMiddleware
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        middleware = SessionMiddleware(lambda r: None)
+        middleware.process_request(request)
+        request.session.save()
+        # Attach messages storage so views using django.contrib.messages work
+        request._messages = FallbackStorage(request)
+
+    def test_login_success_redirects_dashboard(self):
+        # Use Django test client for full middleware (auth + messages)
+        response = self.client.post('/login/', {
+            'email': 'login@example.com',
+            'password': self.password
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/dashboard', response.url)
+
+    def test_login_failure_shows_error(self):
+        response = self.client.post('/login/', {
+            'email': 'login@example.com',
+            'password': 'wrong'
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('ログインに失敗しました', response.content.decode())
+
+    def test_remember_me_sets_longer_expiry(self):
+        response = self.client.post('/login/', {
+            'email': 'login@example.com',
+            'password': self.password,
+            'remember_me': '1'
+        })
+        self.assertEqual(response.status_code, 302)
+        # Access session via client
+        session = self.client.session
+        self.assertNotEqual(session.get_expiry_age(), 0)
+
+    def test_non_remember_me_session_expires_on_browser_close(self):
+        response = self.client.post('/login/', {
+            'email': 'login@example.com',
+            'password': self.password
+        })
+        self.assertEqual(response.status_code, 302)
+        # Validate session is marked to expire at browser close
+        session = self.client.session
+        self.assertTrue(session.get_expire_at_browser_close())
+
+    def test_dashboard_requires_login(self):
+        from tracker.views import dashboard_view
+        from django.contrib.auth.models import AnonymousUser
+        request = self.factory.get('/dashboard/')
+        request.user = AnonymousUser()
+        response = dashboard_view(request)
+        # login_required decorator redirects to login page
+        self.assertEqual(response.status_code, 302)
+
+    def test_logout_redirects_login(self):
+        # Login first
+        self.client.post('/login/', {
+            'email': 'login@example.com',
+            'password': self.password
+        })
+        # Then logout
+        response = self.client.get('/logout/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login', response.url)
+

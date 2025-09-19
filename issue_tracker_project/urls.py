@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from tracker import views as tracker_views
 
 # API imports
 from tracker.api.user_api import create_user, get_user, update_user, list_users, delete_user
@@ -58,4 +59,8 @@ urlpatterns = [
     
     # SystemSettings API endpoints
     path('api/settings/', system_settings_api, name='api_system_settings'), # GET, PUT
+    # UI routes
+    path('login/', tracker_views.login_view, name='login'),
+    path('logout/', tracker_views.logout_view, name='logout'),
+    path('dashboard/', tracker_views.dashboard_view, name='dashboard'),
 ]

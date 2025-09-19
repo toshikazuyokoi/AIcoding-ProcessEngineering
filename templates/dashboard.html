@@ -1,0 +1,11 @@
+{% extends 'auth_base.html' %}
+{% block title %}ダッシュボード | Issue Tracker{% endblock %}
+{% block content %}
+<div class="card shadow-sm auth-card">
+  <div class="card-body p-4">
+    <h2 class="h5 mb-3">ダッシュボード (仮)</h2>
+    <p class="small mb-4">この画面はプレースホルダーです。今後のIssueで実装が拡張されます。</p>
+    <a href="{% url 'logout' %}" class="btn btn-outline-secondary btn-sm">ログアウト</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends 'auth_base.html' %}
+{% block title %}ログイン | Issue Tracker{% endblock %}
+{% block content %}
+<div class="card auth-card shadow-sm" aria-labelledby="loginTitle">
+  <div class="card-body p-4">
+    <h2 id="loginTitle" class="h4 mb-3 fw-semibold text-center">ログイン</h2>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger py-2 px-3 small" role="alert">
+          {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+        </div>
+      {% endif %}
+      <div class="mb-3">
+        <label for="id_email" class="form-label small fw-semibold">メールアドレス</label>
+  <input type="email" name="email" class="form-control form-control-sm{% if form.email.errors %} is-invalid{% endif %}" id="id_email" required autofocus value="{{ form.email.value|default:'' }}" aria-describedby="emailHelp{% if form.email.errors %} emailErrors{% endif %}" {% if form.email.errors %}aria-invalid="true"{% endif %}>
+        <div id="emailHelp" class="form-text small">登録済みのメールアドレスを入力してください。</div>
+        {% if form.email.errors %}
+          <div id="emailErrors" class="invalid-feedback small">
+            {% for error in form.email.errors %}{{ error }}{% endfor %}
+          </div>
+        {% endif %}
+      </div>
+      <div class="mb-3">
+        <label for="id_password" class="form-label small fw-semibold">パスワード</label>
+  <input type="password" name="password" class="form-control form-control-sm{% if form.password.errors %} is-invalid{% endif %}" id="id_password" required aria-describedby="passwordHelp{% if form.password.errors %} passwordErrors{% endif %}" {% if form.password.errors %}aria-invalid="true"{% endif %}>
+        <div id="passwordHelp" class="form-text small">パスワードを入力してください。</div>
+        {% if form.password.errors %}
+          <div id="passwordErrors" class="invalid-feedback small">
+            {% for error in form.password.errors %}{{ error }}{% endfor %}
+          </div>
+        {% endif %}
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" value="1" id="id_remember_me" name="remember_me" {% if form.remember_me.value %}checked{% endif %}>
+        <label class="form-check-label small" for="id_remember_me">ログイン状態を保持する</label>
+      </div>
+      <div class="d-grid mb-3">
+        <button type="submit" class="btn btn-primary btn-sm fw-semibold">ログイン</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
