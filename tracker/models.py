@@ -150,6 +150,7 @@ class Issue(models.Model):
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='medium')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_issues')
     assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_issues')
+    due_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

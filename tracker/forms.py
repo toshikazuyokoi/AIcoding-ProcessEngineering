@@ -4,6 +4,8 @@ from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 from .models import Issue, Project
 
+User = get_user_model()
+
 
 class LoginForm(forms.Form):
     email = forms.EmailField(label="メールアドレス", max_length=254)
@@ -357,3 +359,84 @@ class IssueFilterForm(forms.Form):
                 queryset = queryset.order_by(sort_by)
 
         return queryset
+
+
+class IssueForm(forms.ModelForm):
+    """チケット作成・編集フォーム"""
+    
+    class Meta:
+        model = Issue
+        fields = ['title', 'description', 'priority', 'assigned_to', 'due_date', 'project']
+        widgets = {
+            'title': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'チケットのタイトルを入力してください'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 6,
+                'placeholder': 'チケットの詳細説明を入力してください'
+            }),
+            'priority': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'assigned_to': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'due_date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
+            }),
+            'project': forms.Select(attrs={
+                'class': 'form-select'
+            })
+        }
+        labels = {
+            'title': 'タイトル',
+            'description': '説明',
+            'priority': '優先度',
+            'assigned_to': '担当者',
+            'due_date': '締切日',
+            'project': 'プロジェクト'
+        }
+        error_messages = {
+            'title': {
+                'required': 'この項目は必須です。',
+                'max_length': 'タイトルが長すぎます。',
+            },
+            'description': {
+                'required': 'この項目は必須です。',
+            },
+            'priority': {
+                'required': 'この項目は必須です。',
+                'invalid_choice': '有効な選択肢を選んでください。',
+            },
+        }
+    
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        
+        # 担当者選択肢をアクティブユーザーのみに制限
+        self.fields['assigned_to'].queryset = User.objects.filter(is_active=True)
+        self.fields['assigned_to'].empty_label = "未割り当て"
+        
+        # プロジェクト選択肢を制限（現状は全プロジェクト）
+        self.fields['project'].queryset = Project.objects.all()
+        
+        # 必須フィールドをマーク
+        self.fields['title'].required = True
+        self.fields['description'].required = True
+        self.fields['priority'].required = True
+    
+    def clean_title(self):
+        title = self.cleaned_data.get('title')
+        if title and len(title.strip()) < 5:
+            raise ValidationError('タイトルは5文字以上で入力してください。')
+        return title.strip() if title else title
+    
+    def clean_description(self):
+        description = self.cleaned_data.get('description')
+        if description and len(description.strip()) < 10:
+            raise ValidationError('説明は10文字以上で入力してください。')
+        return description.strip() if description else description

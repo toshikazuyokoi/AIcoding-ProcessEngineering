@@ -9,7 +9,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
 
-from .forms import LoginForm, UserCreateForm, UserEditForm, UserSearchForm, UserPasswordResetForm, IssueFilterForm
+from .forms import LoginForm, UserCreateForm, UserEditForm, UserSearchForm, UserPasswordResetForm, IssueFilterForm, IssueForm
 from .models import Issue, Comment
 
 
@@ -280,5 +280,55 @@ def issue_detail_view(request, issue_id):
 		
 	except Issue.DoesNotExist:
 		# チケットが存在しない場合は404エラー
+		from django.http import Http404
+		raise Http404("チケットが見つかりません。")
+
+
+@login_required
+def issue_create_view(request):
+	"""チケット作成画面（SC-006 チケット作成・編集画面）"""
+	if request.method == 'POST':
+		form = IssueForm(request.POST, user=request.user)
+		if form.is_valid():
+			# created_by を現在のユーザーに設定
+			issue = form.save(commit=False)
+			issue.created_by = request.user
+			issue.save()
+			
+			messages.success(request, f'チケット「{issue.title}」を作成しました。')
+			return redirect('issue_detail', issue_id=issue.id)
+	else:
+		form = IssueForm(user=request.user)
+	
+	context = {
+		'form': form,
+		'mode': 'create'
+	}
+	return render(request, 'issues/issue_form.html', context)
+
+
+@login_required  
+def issue_edit_view(request, issue_id):
+	"""チケット編集画面（SC-006 チケット作成・編集画面）"""
+	try:
+		issue = Issue.objects.get(id=issue_id)
+		
+		if request.method == 'POST':
+			form = IssueForm(request.POST, instance=issue, user=request.user)
+			if form.is_valid():
+				updated_issue = form.save()
+				messages.success(request, f'チケット「{updated_issue.title}」を更新しました。')
+				return redirect('issue_detail', issue_id=updated_issue.id)
+		else:
+			form = IssueForm(instance=issue, user=request.user)
+		
+		context = {
+			'form': form,
+			'issue': issue,
+			'mode': 'edit'
+		}
+		return render(request, 'issues/issue_form.html', context)
+		
+	except Issue.DoesNotExist:
 		from django.http import Http404
 		raise Http404("チケットが見つかりません。")

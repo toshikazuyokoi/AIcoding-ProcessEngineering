@@ -133,12 +133,12 @@
         </div>
       </div>
       <div class="d-flex gap-2">
-        <button class="btn btn-outline-primary disabled">
+        <a href="{% url 'issue_edit' issue.id %}" class="btn btn-outline-primary">
           <i class="bi bi-pencil-square me-1"></i>編集
-        </button>
-        <button class="btn btn-outline-secondary disabled">
+        </a>
+        <a href="{% url 'issue_list' %}" class="btn btn-outline-secondary">
           <i class="bi bi-arrow-left me-1"></i>戻る
-        </button>
+        </a>
       </div>
     </div>
   </div>

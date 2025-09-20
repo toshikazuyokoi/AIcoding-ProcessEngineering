@@ -67,7 +67,9 @@ urlpatterns = [
     
     # Issue Management UI routes
     path('issues/', tracker_views.issue_list_view, name='issue_list'),
+    path('issues/new/', tracker_views.issue_create_view, name='issue_create'),
     path('issues/<int:issue_id>/', tracker_views.issue_detail_view, name='issue_detail'),
+    path('issues/<int:issue_id>/edit/', tracker_views.issue_edit_view, name='issue_edit'),
     
     # User Management UI routes
     path('users/', tracker_views.user_list_view, name='user_list'),
