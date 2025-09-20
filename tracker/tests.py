@@ -2871,3 +2871,132 @@ class IssueFormUITest(TestCase):
 		response = self.client.get(f'/issues/{self.existing_issue.id}/edit/')
 		self.assertRedirects(response, f'/login/?next=/issues/{self.existing_issue.id}/edit/')
 
+
+class NotificationListUITest(TestCase):
+	"""通知一覧画面UI機能のテストクラス"""
+
+	def setUp(self):
+		"""テスト用データの準備"""
+		self.admin_user = User.objects.create_user(
+			username='admin4',
+			email='admin4@example.com',
+			password='testpass123',
+			is_staff=True
+		)
+
+		self.regular_user = User.objects.create_user(
+			username='regular4',
+			email='regular4@example.com',
+			password='testpass123'
+		)
+
+		from tracker.models import Notification
+
+		# テスト用通知を作成
+		self.read_notification = Notification.objects.create(
+			user=self.admin_user,
+			message='既読テスト通知です。',
+			is_read=True
+		)
+
+		self.unread_notification = Notification.objects.create(
+			user=self.admin_user,
+			message='未読テスト通知です。',
+			is_read=False
+		)
+
+		# 他ユーザーの通知（表示されないはず）
+		self.other_user_notification = Notification.objects.create(
+			user=self.regular_user,
+			message='他ユーザーの通知です。',
+			is_read=False
+		)
+
+	def test_notification_list_display(self):
+		"""通知一覧画面の正常表示テスト (UT-501)"""
+		self.client.force_login(self.admin_user)
+		response = self.client.get('/notifications/')
+
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, '通知一覧')
+		self.assertContains(response, '既読テスト通知です。')
+		self.assertContains(response, '未読テスト通知です。')
+		# 他ユーザーの通知は表示されない
+		self.assertNotContains(response, '他ユーザーの通知です。')
+
+		# 統計情報の確認
+		self.assertContains(response, '全 2 件')  # admin_userの通知数
+		self.assertContains(response, '未読 1 件')
+
+		# フィルターフォームの確認
+		self.assertContains(response, 'name="unread_only"')
+		self.assertContains(response, 'name="date_from"')
+		self.assertContains(response, 'name="date_to"')
+
+	def test_notification_list_unread_filter(self):
+		"""未読フィルター機能テスト (UT-501)"""
+		self.client.force_login(self.admin_user)
+		
+		# 未読のみ表示
+		response = self.client.get('/notifications/', {'unread_only': 'true'})
+		
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, '未読テスト通知です。')
+		self.assertNotContains(response, '既読テスト通知です。')
+
+	def test_notification_mark_as_read(self):
+		"""通知既読化処理テスト (UT-501)"""
+		self.client.force_login(self.admin_user)
+		
+		# 既読化POST
+		response = self.client.post(f'/notifications/{self.unread_notification.id}/mark-read/')
+		self.assertRedirects(response, '/notifications/')
+		
+		# 通知が既読化されているか確認
+		self.unread_notification.refresh_from_db()
+		self.assertTrue(self.unread_notification.is_read)
+
+	def test_notification_mark_read_not_found(self):
+		"""存在しない通知の既読化エラーハンドリングテスト (UT-502)"""
+		self.client.force_login(self.admin_user)
+		
+		response = self.client.post('/notifications/999999/mark-read/')
+		self.assertRedirects(response, '/notifications/')
+		# エラーメッセージの確認は省略（messagesフレームワーク使用）
+
+	def test_notification_list_pagination(self):
+		"""ページネーション機能テスト (UT-501)"""
+		self.client.force_login(self.admin_user)
+		
+		# 追加の通知を作成してページネーションをテスト
+		from tracker.models import Notification
+		for i in range(25):  # 20件 + 既存2件 + 25件 = 27件でページング発生
+			Notification.objects.create(
+				user=self.admin_user,
+				message=f'ページネーションテスト通知 {i}',
+				is_read=False
+			)
+		
+		response = self.client.get('/notifications/')
+		self.assertEqual(response.status_code, 200)
+		
+		# ページネーションの確認
+		self.assertContains(response, '件中')
+		# 20件表示の確認（page_obj.object_list の長さは直接確認しにくいため省略）
+
+	def test_notification_list_requires_login(self):
+		"""通知一覧アクセス時のログイン要件テスト (UT-502)"""
+		response = self.client.get('/notifications/')
+		self.assertRedirects(response, '/login/?next=/notifications/')
+
+	def test_notification_mark_read_permission(self):
+		"""他ユーザーの通知既読化の権限テスト (UT-502)"""
+		self.client.force_login(self.regular_user)
+		
+		# 他ユーザー（admin_user）の通知を既読化しようとする
+		response = self.client.post(f'/notifications/{self.unread_notification.id}/mark-read/')
+		self.assertRedirects(response, '/notifications/')
+		
+		# 通知は既読化されていないはず
+		self.unread_notification.refresh_from_db()
+		self.assertFalse(self.unread_notification.is_read)

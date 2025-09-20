@@ -10,7 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 
 from .forms import LoginForm, UserCreateForm, UserEditForm, UserSearchForm, UserPasswordResetForm, IssueFilterForm, IssueForm
-from .models import Issue, Comment
+from .models import Issue, Comment, Notification
 
 
 def is_staff_user(user):
@@ -332,3 +332,73 @@ def issue_edit_view(request, issue_id):
 	except Issue.DoesNotExist:
 		from django.http import Http404
 		raise Http404("チケットが見つかりません。")
+
+
+@login_required
+def notification_list_view(request):
+	"""通知一覧画面（SC-008 通知一覧画面）"""
+	from django.core.paginator import Paginator
+	from .services.notification_service import NotificationService
+	from .models import Notification
+	
+	try:
+		# フィルター処理
+		notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+		
+		# 未読フィルター
+		unread_only = request.GET.get('unread_only')
+		if unread_only == 'true':
+			notifications = notifications.filter(is_read=False)
+		
+		# 日付フィルター（作成日）
+		date_from = request.GET.get('date_from')
+		date_to = request.GET.get('date_to')
+		if date_from:
+			from datetime import datetime
+			notifications = notifications.filter(created_at__date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
+		if date_to:
+			from datetime import datetime
+			notifications = notifications.filter(created_at__date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
+		
+		# ページネーション
+		paginator = Paginator(notifications, 20)  # 20 notifications per page
+		page_number = request.GET.get('page')
+		page_obj = paginator.get_page(page_number)
+		
+		# 統計情報
+		total_notifications = Notification.objects.filter(user=request.user).count()
+		unread_notifications = Notification.objects.filter(user=request.user, is_read=False).count()
+		read_notifications = total_notifications - unread_notifications
+		
+		context = {
+			'page_obj': page_obj,
+			'total_notifications': total_notifications,
+			'unread_notifications': unread_notifications,
+			'read_notifications': read_notifications,
+			'unread_only': unread_only,
+			'date_from': date_from,
+			'date_to': date_to,
+		}
+		return render(request, 'notifications/notification_list.html', context)
+		
+	except Exception as e:
+		messages.error(request, f'通知一覧の取得に失敗しました: {str(e)}')
+		return redirect('dashboard')
+
+
+@login_required  
+def notification_mark_read_view(request, notification_id):
+	"""通知既読化処理"""
+	from .services.notification_service import NotificationService
+	
+	if request.method == 'POST':
+		try:
+			notification = Notification.objects.get(id=notification_id, user=request.user)
+			notification.mark_as_read()
+			messages.success(request, '通知を既読にしました。')
+		except Notification.DoesNotExist:
+			messages.error(request, '通知が見つかりません。')
+		except Exception as e:
+			messages.error(request, f'既読化に失敗しました: {str(e)}')
+	
+	return redirect('notification_list')

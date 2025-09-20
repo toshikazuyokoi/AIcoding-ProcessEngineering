@@ -78,4 +78,8 @@ urlpatterns = [
     path('users/<int:user_id>/delete/', tracker_views.user_delete_view, name='user_delete'),
     path('users/<int:user_id>/password-reset/', tracker_views.user_password_reset_view, name='user_password_reset'),
     path('users/<int:user_id>/toggle-active/', tracker_views.user_toggle_active_view, name='user_toggle_active'),
+    
+    # Notification Management UI routes
+    path('notifications/', tracker_views.notification_list_view, name='notification_list'),
+    path('notifications/<int:notification_id>/mark-read/', tracker_views.notification_mark_read_view, name='notification_mark_read'),
 ]
