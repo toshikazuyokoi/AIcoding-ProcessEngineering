@@ -402,3 +402,42 @@ def notification_mark_read_view(request, notification_id):
 			messages.error(request, f'既読化に失敗しました: {str(e)}')
 	
 	return redirect('notification_list')
+
+
+@login_required
+@user_passes_test(is_staff_user)
+def system_settings_view(request):
+	"""システム設定画面（SC-009 システム設定画面）"""
+	from .services.system_settings_service import SystemSettingsService
+	from .models import SystemSettings
+	
+	try:
+		if request.method == 'POST':
+			# システム設定更新処理
+			maintenance_mode = request.POST.get('maintenance_mode') == 'on'
+			email_sender = request.POST.get('email_sender', '').strip()
+			
+			# SystemSettingsService を使用して更新
+			try:
+				updated_settings = SystemSettingsService.update_settings(
+					maintenance_mode=maintenance_mode,
+					email_sender=email_sender
+				)
+				messages.success(request, 'システム設定を更新しました。')
+				return redirect('system_settings')  # POST後リダイレクト
+			except Exception as e:
+				messages.error(request, f'設定の更新に失敗しました: {str(e)}')
+				
+		# 現在の設定を取得
+		current_settings = SystemSettingsService.get_settings()
+		
+		context = {
+			'settings': current_settings,
+			'maintenance_mode': current_settings.maintenance_mode,
+			'email_sender': current_settings.email_sender,
+		}
+		return render(request, 'settings/system_settings.html', context)
+		
+	except Exception as e:
+		messages.error(request, f'システム設定の表示に失敗しました: {str(e)}')
+		return redirect('dashboard')

@@ -82,4 +82,7 @@ urlpatterns = [
     # Notification Management UI routes
     path('notifications/', tracker_views.notification_list_view, name='notification_list'),
     path('notifications/<int:notification_id>/mark-read/', tracker_views.notification_mark_read_view, name='notification_mark_read'),
+    
+    # System Settings UI routes
+    path('settings/', tracker_views.system_settings_view, name='system_settings'),
 ]

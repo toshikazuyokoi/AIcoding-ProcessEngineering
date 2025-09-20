@@ -1,0 +1,376 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}システム設定 - Issue Tracker{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/issues.css' %}">
+<style>
+/* SC-009 システム設定画面専用スタイル */
+.settings-header {
+  background: linear-gradient(135deg, #343a40 0%, #495057 100%);
+  color: white;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  border-radius: 0.5rem;
+}
+
+.settings-tabs {
+  margin-bottom: 2rem;
+}
+
+.settings-form-card {
+  border: none;
+  box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.settings-form-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 1.25rem;
+  margin: 0;
+}
+
+.settings-form-body {
+  padding: 2rem;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+.form-control {
+  border: 1px solid #ced4da;
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.form-control:focus {
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.form-check {
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 0.5rem;
+  border: 1px solid #e9ecef;
+}
+
+.form-check-input {
+  margin-right: 0.75rem;
+  transform: scale(1.2);
+}
+
+.form-check-label {
+  font-weight: 500;
+  color: #495057;
+}
+
+.settings-actions {
+  background: #f8f9fa;
+  border-top: 1px solid #dee2e6;
+  padding: 1.5rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-settings {
+  padding: 0.75rem 2rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-save {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  border: none;
+  color: white;
+}
+
+.btn-save:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0.25rem 0.75rem rgba(40, 167, 69, 0.3);
+}
+
+.btn-reset {
+  background: #6c757d;
+  border: none;
+  color: white;
+}
+
+.btn-reset:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
+.btn-test {
+  background: #17a2b8;
+  border: none;
+  color: white;
+}
+
+.btn-test:hover {
+  background: #138496;
+  transform: translateY(-1px);
+}
+
+.settings-info {
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.settings-warning {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .settings-header {
+    padding: 1.5rem;
+  }
+  
+  .settings-form-body {
+    padding: 1.5rem;
+  }
+  
+  .settings-actions {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .btn-settings {
+    width: 100%;
+  }
+}
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<!-- BREADCRUMB パンくずナビ -->
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'dashboard' %}">
+        <i class="bi bi-house"></i>ホーム
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">
+      システム設定
+    </li>
+  </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- SETTINGS_HEADER システム設定ヘッダー -->
+  <div class="settings-header">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h1 class="mb-2">
+          <i class="bi bi-gear-fill me-3"></i>システム設定
+        </h1>
+        <p class="mb-0 opacity-75">
+          システム全体の動作設定を管理します。変更は即座に反映されます。
+        </p>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-light">
+          <i class="bi bi-arrow-left me-1"></i>戻る
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS_TABS 設定タブ（将来拡張用） -->
+  <div class="settings-tabs">
+    <ul class="nav nav-tabs" id="settingsTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active fw-semibold" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab" aria-controls="general" aria-selected="true">
+          <i class="bi bi-gear me-2"></i>一般設定
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link fw-semibold" id="email-tab" data-bs-toggle="tab" data-bs-target="#email" type="button" role="tab" aria-controls="email" aria-selected="false">
+          <i class="bi bi-envelope me-2"></i>メール設定
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link fw-semibold disabled" id="security-tab" data-bs-toggle="tab" data-bs-target="#security" type="button" role="tab" aria-controls="security" aria-selected="false">
+          <i class="bi bi-shield-lock me-2"></i>セキュリティ<small class="ms-1 text-muted">(予定)</small>
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <!-- SETTINGS_FORM 設定フォーム -->
+  <form method="post" id="settingsForm">
+    {% csrf_token %}
+    
+    <div class="tab-content" id="settingsTabContent">
+      <!-- 一般設定タブ -->
+      <div class="tab-pane fade show active" id="general" role="tabpanel" aria-labelledby="general-tab">
+        <div class="card settings-form-card">
+          <div class="card-header settings-form-header">
+            <h3 class="settings-form-header mb-0">
+              <i class="bi bi-gear me-2"></i>一般設定
+            </h3>
+          </div>
+          
+          <div class="card-body settings-form-body">
+            <!-- メンテナンスモード設定 -->
+            <div class="form-group">
+              <label for="maintenance_mode" class="form-label">
+                <i class="bi bi-tools me-2"></i>メンテナンスモード
+              </label>
+              <div class="form-check">
+                <input type="checkbox" name="maintenance_mode" id="maintenance_mode" 
+                       class="form-check-input" {% if maintenance_mode %}checked{% endif %}>
+                <label class="form-check-label" for="maintenance_mode">
+                  メンテナンスモードを有効にする
+                </label>
+              </div>
+              <small class="form-text text-muted mt-2">
+                <i class="bi bi-info-circle me-1"></i>
+                有効にするとシステムはメンテナンス中となり、一般ユーザーはアクセスできなくなります。
+              </small>
+            </div>
+
+            {% if maintenance_mode %}
+            <div class="settings-warning">
+              <i class="bi bi-exclamation-triangle-fill me-2"></i>
+              <strong>注意:</strong> 現在メンテナンスモードが有効です。一般ユーザーはシステムにアクセスできません。
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      
+      <!-- メール設定タブ -->
+      <div class="tab-pane fade" id="email" role="tabpanel" aria-labelledby="email-tab">
+        <div class="card settings-form-card">
+          <div class="card-header settings-form-header">
+            <h3 class="settings-form-header mb-0">
+              <i class="bi bi-envelope me-2"></i>メール設定
+            </h3>
+          </div>
+          
+          <div class="card-body settings-form-body">
+            <div class="settings-info">
+              <i class="bi bi-info-circle-fill me-2"></i>
+              システムから送信されるメールの設定を行います。
+            </div>
+            
+            <!-- 送信元メールアドレス -->
+            <div class="form-group">
+              <label for="email_sender" class="form-label">
+                <i class="bi bi-at me-2"></i>送信元メールアドレス
+              </label>
+              <input type="email" name="email_sender" id="email_sender" 
+                     class="form-control" value="{{ email_sender }}" 
+                     placeholder="noreply@example.com">
+              <small class="form-text text-muted mt-2">
+                <i class="bi bi-info-circle me-1"></i>
+                システムから送信される通知メールの送信元アドレスを指定します。
+              </small>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- セキュリティ設定タブ（将来実装） -->
+      <div class="tab-pane fade" id="security" role="tabpanel" aria-labelledby="security-tab">
+        <div class="card settings-form-card">
+          <div class="card-header settings-form-header">
+            <h3 class="settings-form-header mb-0">
+              <i class="bi bi-shield-lock me-2"></i>セキュリティ設定
+            </h3>
+          </div>
+          
+          <div class="card-body settings-form-body text-center py-5">
+            <i class="bi bi-tools text-muted mb-3" style="font-size: 3rem;"></i>
+            <h4 class="text-muted">準備中</h4>
+            <p class="text-muted">セキュリティ設定は今後のバージョンで実装予定です。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- SETTINGS_ACTIONS 設定アクション -->
+    <div class="settings-actions">
+      <div>
+        <small class="text-muted">
+          <i class="bi bi-clock me-1"></i>
+          最終更新: {% if settings.pk %}{{ settings.pk }}件目の設定{% else %}初期設定{% endif %}
+        </small>
+      </div>
+      
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-reset btn-settings" onclick="resetForm()">
+          <i class="bi bi-arrow-clockwise me-1"></i>リセット
+        </button>
+        <button type="button" class="btn btn-test btn-settings" onclick="testSettings()" disabled>
+          <i class="bi bi-check-circle me-1"></i>テスト
+        </button>
+        <button type="submit" class="btn btn-save btn-settings">
+          <i class="bi bi-save me-1"></i>設定を保存
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+// フォームリセット機能
+function resetForm() {
+  if (confirm('設定をリセットしますか？未保存の変更は失われます。')) {
+    document.getElementById('settingsForm').reset();
+    location.reload(); // 元の値に戻すため
+  }
+}
+
+// 設定テスト機能（将来実装）
+function testSettings() {
+  alert('設定テスト機能は今後実装予定です。');
+}
+
+// フォーム送信前の確認
+document.getElementById('settingsForm').addEventListener('submit', function(e) {
+  const maintenanceMode = document.getElementById('maintenance_mode').checked;
+  
+  if (maintenanceMode && !confirm('メンテナンスモードを有効にしますか？\n一般ユーザーがアクセスできなくなります。')) {
+    e.preventDefault();
+    return false;
+  }
+  
+  return true;
+});
+
+// タブ切り替え時の処理
+document.addEventListener('DOMContentLoaded', function() {
+  // Bootstrap tabs initialization
+  const triggerTabList = [].slice.call(document.querySelectorAll('#settingsTabs button'));
+  triggerTabList.forEach(function (triggerEl) {
+    const tabTrigger = new bootstrap.Tab(triggerEl);
+  });
+});
+</script>
+{% endblock %}

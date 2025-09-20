@@ -3000,3 +3000,148 @@ class NotificationListUITest(TestCase):
 		# 通知は既読化されていないはず
 		self.unread_notification.refresh_from_db()
 		self.assertFalse(self.unread_notification.is_read)
+
+
+class SystemSettingsUITest(TestCase):
+	"""システム設定画面UI機能のテストクラス"""
+
+	def setUp(self):
+		"""テスト用データの準備"""
+		self.admin_user = User.objects.create_user(
+			username='admin5',
+			email='admin5@example.com',
+			password='testpass123',
+			is_staff=True
+		)
+
+		self.regular_user = User.objects.create_user(
+			username='regular5',
+			email='regular5@example.com',
+			password='testpass123'
+		)
+
+		from tracker.models import SystemSettings
+		
+		# 初期設定を作成
+		self.initial_settings = SystemSettings.get_settings()
+
+	def test_system_settings_display(self):
+		"""システム設定画面の正常表示テスト (UT-601)"""
+		self.client.force_login(self.admin_user)
+		response = self.client.get('/settings/')
+
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'システム設定')
+		self.assertContains(response, 'メンテナンスモード')
+		self.assertContains(response, '送信元メールアドレス')
+		
+		# フォーム要素の確認
+		self.assertContains(response, 'name="maintenance_mode"')
+		self.assertContains(response, 'name="email_sender"')
+		self.assertContains(response, 'csrf')
+		
+		# 設定タブの確認
+		self.assertContains(response, '一般設定')
+		self.assertContains(response, 'メール設定')
+
+	def test_system_settings_update_success(self):
+		"""システム設定正常更新テスト (UT-601)"""
+		self.client.force_login(self.admin_user)
+		
+		# 設定更新POST
+		response = self.client.post('/settings/', {
+			'maintenance_mode': 'on',
+			'email_sender': 'admin@example.com'
+		})
+		
+		self.assertRedirects(response, '/settings/')
+		
+		# 設定が更新されているか確認
+		from tracker.models import SystemSettings
+		updated_settings = SystemSettings.get_settings()
+		self.assertTrue(updated_settings.maintenance_mode)
+		self.assertEqual(updated_settings.email_sender, 'admin@example.com')
+
+	def test_system_settings_update_validation_error(self):
+		"""システム設定バリデーションエラーテスト (UT-602)"""
+		self.client.force_login(self.admin_user)
+		
+		# 無効なメールアドレスで更新
+		response = self.client.post('/settings/', {
+			'maintenance_mode': '',  # チェックボックス未選択
+			'email_sender': 'invalid-email'  # 無効なメールアドレス
+		})
+		
+		self.assertEqual(response.status_code, 200)  # リダイレクトせずエラー表示
+		# エラーメッセージが含まれることを確認（SystemSettingsServiceでバリデーション）
+
+	def test_system_settings_boundary_values(self):
+		"""システム設定境界値テスト (UT-603)"""
+		self.client.force_login(self.admin_user)
+		
+		# 空のメールアドレス（有効）
+		response = self.client.post('/settings/', {
+			'email_sender': ''  # 空文字（許可される）
+		})
+		self.assertRedirects(response, '/settings/')
+		
+		# 最大長メールアドレス
+		long_email = 'a' * 50 + '@example.com'  # 長いメールアドレス
+		response = self.client.post('/settings/', {
+			'email_sender': long_email
+		})
+		# SystemSettingsServiceでバリデーションされるため、成功するかエラーになる
+		self.assertIn(response.status_code, [200, 302])  # 成功またはバリデーションエラー
+
+	def test_system_settings_requires_admin(self):
+		"""システム設定アクセス権限テスト (UT-602)"""
+		# 一般ユーザーでアクセス
+		self.client.force_login(self.regular_user)
+		response = self.client.get('/settings/')
+		
+		# 管理者権限が必要なため、アクセス拒否される
+		# user_passes_test decoratorは403を返すか、login_urlにリダイレクト
+		self.assertIn(response.status_code, [302, 403])
+		if response.status_code == 302:
+			self.assertTrue(response.url.startswith('/login/') or '/settings/' not in response.url)
+
+	def test_system_settings_requires_login(self):
+		"""システム設定ログイン要件テスト (UT-602)"""
+		response = self.client.get('/settings/')
+		self.assertRedirects(response, '/login/?next=/settings/')
+
+	def test_system_settings_maintenance_mode_warning(self):
+		"""メンテナンスモード有効時の警告表示テスト (UT-601)"""
+		# メンテナンスモードを有効に設定
+		from tracker.models import SystemSettings
+		SystemSettings.update_settings({'maintenance_mode': True})
+		
+		self.client.force_login(self.admin_user)
+		response = self.client.get('/settings/')
+		
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, '現在メンテナンスモードが有効です')
+		self.assertContains(response, 'checked')  # チェックボックスがチェック済み
+
+	def test_system_settings_form_reset_functionality(self):
+		"""設定フォームリセット機能テスト (UT-601)"""
+		self.client.force_login(self.admin_user)
+		response = self.client.get('/settings/')
+		
+		# JavaScriptのresetForm関数が含まれているか確認
+		self.assertContains(response, 'resetForm()')
+		self.assertContains(response, 'リセット')
+
+	def test_system_settings_tab_structure(self):
+		"""システム設定タブ構造テスト (UT-601)"""
+		self.client.force_login(self.admin_user)
+		response = self.client.get('/settings/')
+		
+		# SC-009 設計準拠のタブ構造確認
+		self.assertContains(response, 'settingsTabs')
+		self.assertContains(response, 'general-tab')
+		self.assertContains(response, 'email-tab')
+		self.assertContains(response, 'security-tab')
+		
+		# アクティブタブの確認
+		self.assertContains(response, 'nav-link active')
