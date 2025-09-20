@@ -170,7 +170,11 @@
                   </td>
                   <td>
                     <div>
-                      <strong>{{ issue.title|truncatechars:50 }}</strong>
+                      <strong>
+                        <a href="{% url 'issue_detail' issue.id %}" class="text-decoration-none">
+                          {{ issue.title|truncatechars:50 }}
+                        </a>
+                      </strong>
                       <br>
                       <small class="text-muted">{{ issue.project.name }}</small>
                     </div>
@@ -234,20 +238,25 @@
               <div class="d-flex justify-content-between align-items-start mb-2">
                 <div>
                   <span class="badge bg-secondary me-2">#{{ issue.id }}</span>
-                  <strong>{{ issue.title|truncatechars:30 }}</strong>
+                  <strong>
+                    <a href="{% url 'issue_detail' issue.id %}" class="text-decoration-none">
+                      {{ issue.title|truncatechars:30 }}
+                    </a>
+                  </strong>
                 </div>
                 <div class="btn-group btn-group-sm">
-                  <a href="#" class="btn btn-outline-primary btn-sm disabled" title="詳細">
+                  <a href="{% url 'issue_detail' issue.id %}" class="btn btn-outline-primary btn-sm" title="詳細">
                     <i class="bi bi-eye"></i>
+                  </a>
+                  <a href="#" class="btn btn-outline-secondary btn-sm disabled" title="編集">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <a href="#" class="btn btn-outline-danger btn-sm disabled" title="削除">
+                    <i class="bi bi-trash"></i>
                   </a>
                 </div>
               </div>
-              
-              <div class="small mb-2">
-                <i class="bi bi-folder me-1"></i>{{ issue.project.name }}
-              </div>
-              
-              <div class="d-flex flex-wrap gap-1 mb-2">
+              <div class="mb-2">
                 {% if issue.status == 'open' %}
                   <span class="badge bg-primary status-badge">{{ issue.get_status_display }}</span>
                 {% elif issue.status == 'in_progress' %}
@@ -259,31 +268,26 @@
                 {% else %}
                   <span class="badge bg-secondary status-badge">{{ issue.get_status_display }}</span>
                 {% endif %}
-
                 {% if issue.priority == 'critical' %}
-                  <span class="badge bg-danger priority-badge">{{ issue.get_priority_display }}</span>
+                  <span class="badge bg-danger priority-badge ms-1">{{ issue.get_priority_display }}</span>
                 {% elif issue.priority == 'high' %}
-                  <span class="badge bg-warning priority-badge">{{ issue.get_priority_display }}</span>
+                  <span class="badge bg-warning priority-badge ms-1">{{ issue.get_priority_display }}</span>
                 {% elif issue.priority == 'medium' %}
-                  <span class="badge bg-info priority-badge">{{ issue.get_priority_display }}</span>
+                  <span class="badge bg-info priority-badge ms-1">{{ issue.get_priority_display }}</span>
                 {% elif issue.priority == 'low' %}
-                  <span class="badge bg-light text-dark priority-badge">{{ issue.get_priority_display }}</span>
+                  <span class="badge bg-light text-dark priority-badge ms-1">{{ issue.get_priority_display }}</span>
                 {% else %}
-                  <span class="badge bg-secondary priority-badge">{{ issue.get_priority_display }}</span>
+                  <span class="badge bg-secondary priority-badge ms-1">{{ issue.get_priority_display }}</span>
                 {% endif %}
               </div>
-              
-              <div class="d-flex justify-content-between small text-muted">
-                <span>
-                  {% if issue.assigned_to %}
-                    <i class="bi bi-person me-1"></i>{{ issue.assigned_to.username }}
-                  {% else %}
-                    <i class="bi bi-person me-1"></i>未割り当て
-                  {% endif %}
-                </span>
-                <span>
-                  <i class="bi bi-calendar me-1"></i>{{ issue.created_at|date:"m/d H:i" }}
-                </span>
+              <div class="small text-muted">
+                <i class="bi bi-person me-1"></i>
+                {% if issue.assigned_to %}{{ issue.assigned_to.username }}{% else %}未割り当て{% endif %}
+                <span class="mx-2">|</span>
+                <i class="bi bi-clock me-1"></i>{{ issue.created_at|date:"Y-m-d" }}
+              </div>
+              <div class="small text-muted mt-1">
+                <i class="bi bi-folder me-1"></i>{{ issue.project.name }}
               </div>
             </div>
             {% endfor %}

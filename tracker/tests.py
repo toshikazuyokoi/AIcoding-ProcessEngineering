@@ -1956,7 +1956,7 @@ class SystemSettingsAPITest(TestCase):
         # 無効なデータ（maintenance_mode should be boolean）
         invalid_data = {
             'maintenance_mode': 'invalid_string',  # Should be boolean
-            'email_sender': 'invalid-email-format'  # Invalid email
+            'email_sender': 'invalid-email'  # Invalid email
         }
         
         request = self.factory.put(
@@ -2626,4 +2626,92 @@ class IssueListUITest(TestCase):
 		self.assertContains(response, 'チケット一覧')
 		self.assertContains(response, 'Test Issue 1')
 		self.assertContains(response, 'Test Issue 2')
+
+
+class IssueDetailUITest(TestCase):
+	"""チケット詳細画面UI機能のテストクラス"""
+
+	def setUp(self):
+		"""テスト用データの準備"""
+		self.admin_user = User.objects.create_user(
+			username='admin2',
+			email='admin2@example.com',
+			password='testpass123',
+			is_staff=True
+		)
+
+		self.regular_user = User.objects.create_user(
+			username='regular2',
+			email='regular2@example.com',
+			password='testpass123'
+		)
+
+		from tracker.models import Project, Issue, Comment
+
+		self.project = Project.objects.create(
+			name='Detail Project',
+			description='Detail project description',
+			created_by=self.admin_user
+		)
+
+		self.issue = Issue.objects.create(
+			title='Detail Test Issue',
+			description='This is a detailed description for testing.\nSecond line.',
+			project=self.project,
+			created_by=self.admin_user,
+			assigned_to=self.regular_user,
+			status='open',
+			priority='high'
+		)
+
+		# コメントを2件作成
+		Comment.objects.create(
+			issue=self.issue,
+			user=self.admin_user,
+			content='First comment content'
+		)
+		Comment.objects.create(
+			issue=self.issue,
+			user=self.regular_user,
+			content='Second comment content'
+		)
+
+	def test_issue_detail_requires_login(self):
+		"""チケット詳細表示はログインが必要"""
+		response = self.client.get(f'/issues/{self.issue.id}/')
+		self.assertRedirects(response, f'/login/?next=/issues/{self.issue.id}/')
+
+	def test_issue_detail_display(self):
+		"""チケット詳細の正常表示テスト (UT-301)"""
+		self.client.force_login(self.admin_user)
+		response = self.client.get(f'/issues/{self.issue.id}/')
+
+		self.assertEqual(response.status_code, 200)
+		# ヘッダー情報
+		self.assertContains(response, 'チケット詳細')
+		self.assertContains(response, 'Detail Test Issue')
+		self.assertContains(response, f'#{self.issue.id}')
+		self.assertContains(response, self.issue.get_status_display())
+		self.assertContains(response, self.issue.get_priority_display())
+
+		# 基本情報
+		self.assertContains(response, self.admin_user.username)
+		self.assertContains(response, self.regular_user.username)
+		self.assertContains(response, self.project.name)
+
+		# 説明 (改行レンダリング確認)
+		self.assertContains(response, 'This is a detailed description for testing.')
+		self.assertContains(response, 'Second line.')
+
+		# コメント
+		self.assertContains(response, 'コメント')
+		self.assertContains(response, 'First comment content')
+		self.assertContains(response, 'Second comment content')
+		self.assertContains(response, 'badge bg-secondary')  # コメント数バッジ
+
+	def test_issue_detail_not_found(self):
+		"""存在しないチケットIDアクセス時のエラーハンドリングテスト (UT-302)"""
+		self.client.force_login(self.admin_user)
+		response = self.client.get('/issues/999999/')
+		self.assertEqual(response.status_code, 404)
 

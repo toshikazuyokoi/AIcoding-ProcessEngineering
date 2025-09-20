@@ -10,7 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 
 from .forms import LoginForm, UserCreateForm, UserEditForm, UserSearchForm, UserPasswordResetForm, IssueFilterForm
-from .models import Issue
+from .models import Issue, Comment
 
 
 def is_staff_user(user):
@@ -256,3 +256,29 @@ def issue_list_view(request):
 		'priority_stats': priority_stats,
 	}
 	return render(request, 'issues/issue_list.html', context)
+
+
+@login_required
+def issue_detail_view(request, issue_id):
+	"""チケット詳細表示（SC-005 チケット詳細画面）"""
+	try:
+		# チケット情報を取得（関連データも含む）
+		issue = Issue.objects.select_related(
+			'project', 'created_by', 'assigned_to'
+		).get(id=issue_id)
+		
+		# チケットのコメント一覧を取得（作成日順）
+		comments = Comment.objects.filter(
+			issue=issue
+		).select_related('user').order_by('created_at')
+		
+		context = {
+			'issue': issue,
+			'comments': comments,
+		}
+		return render(request, 'issues/issue_detail.html', context)
+		
+	except Issue.DoesNotExist:
+		# チケットが存在しない場合は404エラー
+		from django.http import Http404
+		raise Http404("チケットが見つかりません。")
