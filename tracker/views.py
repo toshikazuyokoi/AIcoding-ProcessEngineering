@@ -9,7 +9,8 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
 
-from .forms import LoginForm, UserCreateForm, UserEditForm, UserSearchForm, UserPasswordResetForm
+from .forms import LoginForm, UserCreateForm, UserEditForm, UserSearchForm, UserPasswordResetForm, IssueFilterForm
+from .models import Issue
 
 
 def is_staff_user(user):
@@ -203,3 +204,55 @@ def user_toggle_active_view(request, user_id):
 		'is_active': user.is_active,
 		'message': f'ユーザー「{user.username}」を{status_text}に変更しました。'
 	})
+
+
+# Issue Management Views
+@login_required
+def issue_list_view(request):
+	"""チケット一覧表示"""
+	# 基本クエリセット（全ユーザーがアクセス可能）
+	issues = Issue.objects.select_related('project', 'created_by', 'assigned_to').all()
+	
+	# フィルター処理
+	filter_form = IssueFilterForm(request.GET or None)
+	if filter_form.is_valid():
+		issues = filter_form.filter_queryset(issues)
+	
+	# ページネーション
+	paginator = Paginator(issues, 20)  # 20 issues per page
+	page_number = request.GET.get('page')
+	page_obj = paginator.get_page(page_number)
+	
+	# 統計情報
+	total_issues = Issue.objects.count()
+	open_issues = Issue.objects.filter(status__in=['open', 'in_progress']).count()
+	closed_issues = Issue.objects.filter(status__in=['resolved', 'closed']).count()
+	
+	# ステータス別集計
+	status_stats = {}
+	for status_choice in Issue.STATUS_CHOICES:
+		status_key = status_choice[0]
+		status_name = status_choice[1]
+		count = Issue.objects.filter(status=status_key).count()
+		if count > 0:
+			status_stats[status_name] = count
+	
+	# 優先度別集計
+	priority_stats = {}
+	for priority_choice in Issue.PRIORITY_CHOICES:
+		priority_key = priority_choice[0]
+		priority_name = priority_choice[1]
+		count = Issue.objects.filter(priority=priority_key).count()
+		if count > 0:
+			priority_stats[priority_name] = count
+	
+	context = {
+		'page_obj': page_obj,
+		'filter_form': filter_form,
+		'total_issues': total_issues,
+		'open_issues': open_issues,
+		'closed_issues': closed_issues,
+		'status_stats': status_stats,
+		'priority_stats': priority_stats,
+	}
+	return render(request, 'issues/issue_list.html', context)

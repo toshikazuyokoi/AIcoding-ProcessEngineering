@@ -2486,3 +2486,144 @@ class UserFormTest(TestCase):
         active_count = User.objects.filter(is_active=True).count()
         self.assertEqual(filtered.count(), active_count)
 
+
+class IssueListUITest(TestCase):
+	"""チケット一覧画面UI機能のテストクラス"""
+	
+	def setUp(self):
+		"""テスト用データの準備"""
+		self.admin_user = User.objects.create_user(
+			username='admin',
+			email='admin@example.com',
+			password='testpass123',
+			is_staff=True
+		)
+		
+		self.regular_user = User.objects.create_user(
+			username='regular',
+			email='regular@example.com',
+			password='testpass123'
+		)
+		
+		# テスト用プロジェクト作成
+		from tracker.models import Project, Issue
+		
+		self.project1 = Project.objects.create(
+			name='Test Project 1',
+			description='Test project description',
+			created_by=self.admin_user
+		)
+		
+		self.project2 = Project.objects.create(
+			name='Test Project 2', 
+			description='Another test project',
+			created_by=self.regular_user
+		)
+		
+		# テスト用チケット作成
+		self.issue1 = Issue.objects.create(
+			title='Test Issue 1',
+			description='Test issue description 1',
+			project=self.project1,
+			created_by=self.admin_user,
+			assigned_to=self.regular_user,
+			status='open',
+			priority='high'
+		)
+		
+		self.issue2 = Issue.objects.create(
+			title='Test Issue 2',
+			description='Test issue description 2',
+			project=self.project2,
+			created_by=self.regular_user,
+			assigned_to=self.admin_user,
+			status='in_progress',
+			priority='medium'
+		)
+		
+		self.issue3 = Issue.objects.create(
+			title='Test Issue 3',
+			description='Test issue description 3',
+			project=self.project1,
+			created_by=self.admin_user,
+			status='closed',
+			priority='low'
+		)
+
+	def test_issue_list_requires_login(self):
+		"""チケット一覧表示はログインが必要"""
+		response = self.client.get('/issues/')
+		self.assertRedirects(response, '/login/?next=/issues/')
+
+	def test_issue_list_display(self):
+		"""チケット一覧の正常表示テスト (UT-201)"""
+		self.client.force_login(self.admin_user)
+		response = self.client.get('/issues/')
+		
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'チケット一覧')
+		self.assertContains(response, 'Test Issue 1')
+		self.assertContains(response, 'Test Issue 2')
+		self.assertContains(response, 'Test Issue 3')
+		self.assertContains(response, 'Test Project 1')
+		self.assertContains(response, 'Test Project 2')
+		
+		# 統計情報の確認
+		self.assertContains(response, '全チケット')
+		self.assertContains(response, '未完了')
+		self.assertContains(response, '完了済み')
+		
+		# フィルターフォームの確認
+		self.assertContains(response, '検索・フィルター')
+		self.assertContains(response, 'name="search"')
+		self.assertContains(response, 'name="status"')
+		self.assertContains(response, 'name="priority"')
+		self.assertContains(response, 'name="assigned_to"')
+
+	def test_issue_list_search_filter(self):
+		"""チケット一覧検索・フィルター機能テスト"""
+		self.client.force_login(self.admin_user)
+		
+		# タイトル検索
+		response = self.client.get('/issues/', {'search': 'Test Issue 1'})
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'Test Issue 1')
+		self.assertNotContains(response, 'Test Issue 2')
+		
+		# ステータスフィルター
+		response = self.client.get('/issues/', {'status': 'open'})
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'Test Issue 1')
+		self.assertNotContains(response, 'Test Issue 2')
+		
+		# 優先度フィルター
+		response = self.client.get('/issues/', {'priority': 'high'})
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'Test Issue 1')
+		self.assertNotContains(response, 'Test Issue 2')
+		
+		# 担当者フィルター
+		response = self.client.get('/issues/', {'assigned_to': self.regular_user.id})
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'Test Issue 1')
+		self.assertNotContains(response, 'Test Issue 2')
+
+	def test_issue_list_nonexistent_page(self):
+		"""存在しないページ番号でのアクセステスト (UT-202)"""
+		self.client.force_login(self.admin_user)
+		
+		# 存在しないページ番号
+		response = self.client.get('/issues/', {'page': '999'})
+		self.assertEqual(response.status_code, 200)  # 最後のページが表示される
+
+	def test_issue_list_regular_user_access(self):
+		"""一般ユーザーのアクセステスト"""
+		self.client.force_login(self.regular_user)
+		response = self.client.get('/issues/')
+		
+		self.assertEqual(response.status_code, 200)
+		# 一般ユーザーでも全てのチケットが見える（設計通り）
+		self.assertContains(response, 'チケット一覧')
+		self.assertContains(response, 'Test Issue 1')
+		self.assertContains(response, 'Test Issue 2')
+

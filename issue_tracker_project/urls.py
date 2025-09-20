@@ -59,10 +59,14 @@ urlpatterns = [
     
     # SystemSettings API endpoints
     path('api/settings/', system_settings_api, name='api_system_settings'), # GET, PUT
+    
     # UI routes
     path('login/', tracker_views.login_view, name='login'),
     path('logout/', tracker_views.logout_view, name='logout'),
     path('dashboard/', tracker_views.dashboard_view, name='dashboard'),
+    
+    # Issue Management UI routes
+    path('issues/', tracker_views.issue_list_view, name='issue_list'),
     
     # User Management UI routes
     path('users/', tracker_views.user_list_view, name='user_list'),

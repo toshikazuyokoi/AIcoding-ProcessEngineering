@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}チケット一覧{% endblock %}
+
+{% block extra_head %}
+<style>
+  .filter-card {
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  }
+  .status-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+  .priority-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+  .issue-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-top: none;
+  }
+  .issue-row:hover {
+    background-color: #f8f9fa;
+  }
+  .stats-card {
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- PAGE_TITLE -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center">
+        <h2 class="mb-0">
+          <i class="bi bi-bug-fill me-2"></i>チケット一覧
+        </h2>
+        <div class="d-flex gap-2">
+          <a href="#" class="btn btn-primary disabled">
+            <i class="bi bi-plus-lg me-1"></i>新規作成
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 統計情報カード -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card stats-card">
+        <div class="card-body text-center">
+          <h4 class="mb-0 text-primary">{{ total_issues }}</h4>
+          <small class="text-muted">全チケット</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card stats-card">
+        <div class="card-body text-center">
+          <h4 class="mb-0 text-warning">{{ open_issues }}</h4>
+          <small class="text-muted">未完了</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card stats-card">
+        <div class="card-body text-center">
+          <h4 class="mb-0 text-success">{{ closed_issues }}</h4>
+          <small class="text-muted">完了済み</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card stats-card">
+        <div class="card-body text-center">
+          <h4 class="mb-0 text-info">{{ priority_stats.Critical|default:0 }}</h4>
+          <small class="text-muted">高優先度</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTER_BAR + SEARCH_BAR -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card filter-card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-funnel me-2"></i>検索・フィルター
+          </h5>
+        </div>
+        <div class="card-body">
+          <form method="get" class="row g-3">
+            <!-- SEARCH_BAR -->
+            <div class="col-md-4">
+              {{ filter_form.search.label_tag }}
+              {{ filter_form.search }}
+            </div>
+            
+            <!-- FILTER_BAR -->
+            <div class="col-md-2">
+              {{ filter_form.status.label_tag }}
+              {{ filter_form.status }}
+            </div>
+            
+            <div class="col-md-2">
+              {{ filter_form.priority.label_tag }}
+              {{ filter_form.priority }}
+            </div>
+            
+            <div class="col-md-2">
+              {{ filter_form.assigned_to.label_tag }}
+              {{ filter_form.assigned_to }}
+            </div>
+            
+            <div class="col-md-2">
+              {{ filter_form.sort_by.label_tag }}
+              {{ filter_form.sort_by }}
+            </div>
+            
+            <div class="col-12">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-search me-1"></i>検索
+              </button>
+              <a href="{% url 'issue_list' %}" class="btn btn-outline-secondary ms-2">
+                <i class="bi bi-arrow-clockwise me-1"></i>リセット
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ISSUES_TABLE -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">チケット一覧</h5>
+          <small class="text-muted">{{ page_obj.paginator.count }} 件中 {{ page_obj.start_index }}〜{{ page_obj.end_index }} 件を表示</small>
+        </div>
+        <div class="card-body p-0">
+          {% if page_obj %}
+          <!-- デスクトップ版テーブル -->
+          <div class="table-responsive d-none d-lg-block">
+            <table class="table table-striped issue-table mb-0">
+              <thead>
+                <tr>
+                  <th style="width: 80px;">ID</th>
+                  <th style="width: 300px;">タイトル</th>
+                  <th style="width: 100px;">ステータス</th>
+                  <th style="width: 100px;">優先度</th>
+                  <th style="width: 120px;">担当者</th>
+                  <th style="width: 120px;">作成日</th>
+                  <th style="width: 100px;">アクション</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for issue in page_obj %}
+                <tr class="issue-row">
+                  <td>
+                    <span class="badge bg-secondary">#{{ issue.id }}</span>
+                  </td>
+                  <td>
+                    <div>
+                      <strong>{{ issue.title|truncatechars:50 }}</strong>
+                      <br>
+                      <small class="text-muted">{{ issue.project.name }}</small>
+                    </div>
+                  </td>
+                  <td>
+                    {% if issue.status == 'open' %}
+                      <span class="badge bg-primary status-badge">{{ issue.get_status_display }}</span>
+                    {% elif issue.status == 'in_progress' %}
+                      <span class="badge bg-warning status-badge">{{ issue.get_status_display }}</span>
+                    {% elif issue.status == 'resolved' %}
+                      <span class="badge bg-info status-badge">{{ issue.get_status_display }}</span>
+                    {% elif issue.status == 'closed' %}
+                      <span class="badge bg-success status-badge">{{ issue.get_status_display }}</span>
+                    {% else %}
+                      <span class="badge bg-secondary status-badge">{{ issue.get_status_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if issue.priority == 'critical' %}
+                      <span class="badge bg-danger priority-badge">{{ issue.get_priority_display }}</span>
+                    {% elif issue.priority == 'high' %}
+                      <span class="badge bg-warning priority-badge">{{ issue.get_priority_display }}</span>
+                    {% elif issue.priority == 'medium' %}
+                      <span class="badge bg-info priority-badge">{{ issue.get_priority_display }}</span>
+                    {% elif issue.priority == 'low' %}
+                      <span class="badge bg-light text-dark priority-badge">{{ issue.get_priority_display }}</span>
+                    {% else %}
+                      <span class="badge bg-secondary priority-badge">{{ issue.get_priority_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if issue.assigned_to %}
+                      <span class="text-nowrap">{{ issue.assigned_to.username }}</span>
+                    {% else %}
+                      <span class="text-muted">未割り当て</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <small>{{ issue.created_at|date:"m/d H:i" }}</small>
+                  </td>
+                  <td>
+                    <div class="btn-group btn-group-sm">
+                      <a href="#" class="btn btn-outline-primary btn-sm disabled" title="詳細">
+                        <i class="bi bi-eye"></i>
+                      </a>
+                      <a href="#" class="btn btn-outline-secondary btn-sm disabled" title="編集">
+                        <i class="bi bi-pencil"></i>
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- モバイル版リスト -->
+          <div class="d-lg-none">
+            {% for issue in page_obj %}
+            <div class="border-bottom p-3">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                  <span class="badge bg-secondary me-2">#{{ issue.id }}</span>
+                  <strong>{{ issue.title|truncatechars:30 }}</strong>
+                </div>
+                <div class="btn-group btn-group-sm">
+                  <a href="#" class="btn btn-outline-primary btn-sm disabled" title="詳細">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                </div>
+              </div>
+              
+              <div class="small mb-2">
+                <i class="bi bi-folder me-1"></i>{{ issue.project.name }}
+              </div>
+              
+              <div class="d-flex flex-wrap gap-1 mb-2">
+                {% if issue.status == 'open' %}
+                  <span class="badge bg-primary status-badge">{{ issue.get_status_display }}</span>
+                {% elif issue.status == 'in_progress' %}
+                  <span class="badge bg-warning status-badge">{{ issue.get_status_display }}</span>
+                {% elif issue.status == 'resolved' %}
+                  <span class="badge bg-info status-badge">{{ issue.get_status_display }}</span>
+                {% elif issue.status == 'closed' %}
+                  <span class="badge bg-success status-badge">{{ issue.get_status_display }}</span>
+                {% else %}
+                  <span class="badge bg-secondary status-badge">{{ issue.get_status_display }}</span>
+                {% endif %}
+
+                {% if issue.priority == 'critical' %}
+                  <span class="badge bg-danger priority-badge">{{ issue.get_priority_display }}</span>
+                {% elif issue.priority == 'high' %}
+                  <span class="badge bg-warning priority-badge">{{ issue.get_priority_display }}</span>
+                {% elif issue.priority == 'medium' %}
+                  <span class="badge bg-info priority-badge">{{ issue.get_priority_display }}</span>
+                {% elif issue.priority == 'low' %}
+                  <span class="badge bg-light text-dark priority-badge">{{ issue.get_priority_display }}</span>
+                {% else %}
+                  <span class="badge bg-secondary priority-badge">{{ issue.get_priority_display }}</span>
+                {% endif %}
+              </div>
+              
+              <div class="d-flex justify-content-between small text-muted">
+                <span>
+                  {% if issue.assigned_to %}
+                    <i class="bi bi-person me-1"></i>{{ issue.assigned_to.username }}
+                  {% else %}
+                    <i class="bi bi-person me-1"></i>未割り当て
+                  {% endif %}
+                </span>
+                <span>
+                  <i class="bi bi-calendar me-1"></i>{{ issue.created_at|date:"m/d H:i" }}
+                </span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="p-5 text-center">
+            <i class="bi bi-search display-4 text-muted mb-3"></i>
+            <h5 class="text-muted">チケットが見つかりません</h5>
+            <p class="text-muted">検索条件を変更してお試しください。</p>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- ページネーション -->
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer">
+          <nav aria-label="チケット一覧ページネーション">
+            <ul class="pagination justify-content-center mb-0">
+              {% if page_obj.has_previous %}
+                <li class="page-item">
+                  <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}" aria-label="前へ">
+                    <span aria-hidden="true">&laquo;</span>
+                  </a>
+                </li>
+              {% else %}
+                <li class="page-item disabled">
+                  <span class="page-link" aria-label="前へ">
+                    <span aria-hidden="true">&laquo;</span>
+                  </span>
+                </li>
+              {% endif %}
+
+              {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                  <li class="page-item active">
+                    <span class="page-link">{{ num }}</span>
+                  </li>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                  <li class="page-item">
+                    <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ num }}">{{ num }}</a>
+                  </li>
+                {% endif %}
+              {% endfor %}
+
+              {% if page_obj.has_next %}
+                <li class="page-item">
+                  <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}" aria-label="次へ">
+                    <span aria-hidden="true">&raquo;</span>
+                  </a>
+                </li>
+              {% else %}
+                <li class="page-item disabled">
+                  <span class="page-link" aria-label="次へ">
+                    <span aria-hidden="true">&raquo;</span>
+                  </span>
+                </li>
+              {% endif %}
+            </ul>
+          </nav>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

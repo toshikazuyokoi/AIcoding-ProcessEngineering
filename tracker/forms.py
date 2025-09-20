@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
+from .models import Issue, Project
 
 
 class LoginForm(forms.Form):
@@ -249,3 +250,110 @@ class UserPasswordResetForm(forms.Form):
         if password and len(password) < 8:
             raise ValidationError("パスワードは8文字以上で入力してください。")
         return password
+
+
+class IssueFilterForm(forms.Form):
+    """チケット一覧フィルタフォーム"""
+    search = forms.CharField(
+        label="検索",
+        max_length=200,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "タイトルまたは説明を検索"
+        })
+    )
+    
+    project = forms.ModelChoiceField(
+        label="プロジェクト",
+        queryset=Project.objects.all(),
+        required=False,
+        empty_label="全てのプロジェクト",
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+    
+    status = forms.ChoiceField(
+        label="ステータス",
+        choices=[("", "全てのステータス")] + Issue.STATUS_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+    
+    priority = forms.ChoiceField(
+        label="優先度",
+        choices=[("", "全ての優先度")] + Issue.PRIORITY_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+    
+    assigned_to = forms.ModelChoiceField(
+        label="担当者",
+        queryset=get_user_model().objects.all(),
+        required=False,
+        empty_label="全ての担当者",
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+    
+    sort_by = forms.ChoiceField(
+        label="並び順",
+        choices=[
+            ("-created_at", "作成日（新しい順）"),
+            ("created_at", "作成日（古い順）"),
+            ("title", "タイトル（昇順）"),
+            ("-title", "タイトル（降順）"),
+            ("status", "ステータス"),
+            ("priority", "優先度"),
+        ],
+        initial="-created_at",
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+
+    def filter_queryset(self, queryset):
+        """検索条件に基づいてクエリセットをフィルタ"""
+        search = self.cleaned_data.get("search")
+        project = self.cleaned_data.get("project")
+        status = self.cleaned_data.get("status")
+        priority = self.cleaned_data.get("priority")
+        assigned_to = self.cleaned_data.get("assigned_to")
+        sort_by = self.cleaned_data.get("sort_by", "-created_at")
+
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(title__icontains=search) | Q(description__icontains=search)
+            )
+
+        if project:
+            queryset = queryset.filter(project=project)
+
+        if status:
+            queryset = queryset.filter(status=status)
+
+        if priority:
+            queryset = queryset.filter(priority=priority)
+
+        if assigned_to:
+            queryset = queryset.filter(assigned_to=assigned_to)
+
+        # ソート適用
+        if sort_by:
+            # 優先度でのソートは特別な順序が必要
+            if sort_by == "priority":
+                # critical > high > medium > low の順
+                priority_order = ["critical", "high", "medium", "low"]
+                queryset = queryset.extra(
+                    select={'priority_order': 
+                        "CASE priority " +
+                        " WHEN 'critical' THEN 1" +
+                        " WHEN 'high' THEN 2" +
+                        " WHEN 'medium' THEN 3" +
+                        " WHEN 'low' THEN 4" +
+                        " ELSE 5 END"
+                    },
+                    order_by=['priority_order']
+                )
+            else:
+                queryset = queryset.order_by(sort_by)
+
+        return queryset
