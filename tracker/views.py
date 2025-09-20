@@ -441,3 +441,85 @@ def system_settings_view(request):
 	except Exception as e:
 		messages.error(request, f'システム設定の表示に失敗しました: {str(e)}')
 		return redirect('dashboard')
+
+
+def is_pm_or_admin(user):
+	"""PM または管理者権限チェック"""
+	return user.is_staff or user.groups.filter(name='ProjectManager').exists()
+
+
+@login_required
+@user_passes_test(is_pm_or_admin)
+def statistics_view(request):
+	"""
+	統計情報画面表示（UC-019: チケット統計表示）
+	PM または管理者のみアクセス可能
+	"""
+	try:
+		from .services.statistics_service import StatisticsService
+		from .models import Project
+		
+		# フィルタリング用のプロジェクト一覧取得
+		projects = Project.objects.all().order_by('name')
+		
+		# フィルタパラメータ取得
+		selected_project_id = request.GET.get('project_id')
+		filter_type = request.GET.get('filter_type', 'global')  # 'global', 'project', 'user'
+		
+		statistics_data = {}
+		
+		if filter_type == 'project' and selected_project_id:
+			# プロジェクト別統計
+			try:
+				project_id = int(selected_project_id)
+				project_stats = StatisticsService.get_project_statistics_dict(project_id)
+				if project_stats:
+					statistics_data = {
+						'type': 'project',
+						'project_id': project_id,
+						'project_name': Project.objects.get(id=project_id).name,
+						**project_stats
+					}
+				else:
+					messages.warning(request, '指定されたプロジェクトの統計データが見つかりませんでした。')
+			except (ValueError, Project.DoesNotExist):
+				messages.error(request, '無効なプロジェクトが指定されました。')
+		elif filter_type == 'user':
+			# ユーザー別統計（ログインユーザー）
+			user_stats = StatisticsService.get_user_statistics(request.user.id)
+			statistics_data = {
+				'type': 'user',
+				'user_id': request.user.id,
+				'user_name': request.user.username,
+				**user_stats
+			}
+		else:
+			# グローバル統計（デフォルト）
+			global_stats = StatisticsService.get_global_statistics()
+			statistics_data = {
+				'type': 'global',
+				**global_stats
+			}
+		
+		# ステータス別・優先度別内訳取得
+		status_breakdown = StatisticsService.get_issue_status_breakdown(
+			project_id=int(selected_project_id) if selected_project_id else None
+		)
+		priority_breakdown = StatisticsService.get_issue_priority_breakdown(
+			project_id=int(selected_project_id) if selected_project_id else None
+		)
+		
+		context = {
+			'statistics': statistics_data,
+			'status_breakdown': status_breakdown,
+			'priority_breakdown': priority_breakdown,
+			'projects': projects,
+			'selected_project_id': selected_project_id,
+			'filter_type': filter_type,
+		}
+		
+		return render(request, 'statistics/statistics.html', context)
+		
+	except Exception as e:
+		messages.error(request, f'統計情報の表示に失敗しました: {str(e)}')
+		return redirect('dashboard')

@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}統計情報{% endblock %}
+
+{% block extra_css %}
+<style>
+  .stats-card {
+    transition: transform 0.2s;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  .stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+  .stats-number {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .stats-label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+  }
+  .filter-section {
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .breakdown-card {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  .progress-custom {
+    height: 0.5rem;
+  }
+  @media (max-width: 768px) {
+    .stats-number {
+      font-size: 2rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- PAGE_TITLE -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center">
+        <h2 class="mb-0">
+          <i class="bi bi-bar-chart-fill me-2"></i>統計情報
+        </h2>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>印刷
+          </button>
+          <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>戻る
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATISTICS_FILTERS -->
+  <div class="filter-section">
+    <h5 class="mb-3"><i class="bi bi-funnel me-2"></i>フィルター設定</h5>
+    <form method="GET" class="row g-3">
+      <div class="col-md-4">
+        <label for="filter_type" class="form-label">表示範囲</label>
+        <select name="filter_type" id="filter_type" class="form-select" onchange="toggleProjectSelect()">
+          <option value="global" {% if filter_type == 'global' %}selected{% endif %}>全体統計</option>
+          <option value="project" {% if filter_type == 'project' %}selected{% endif %}>プロジェクト別</option>
+          <option value="user" {% if filter_type == 'user' %}selected{% endif %}>個人統計</option>
+        </select>
+      </div>
+      <div class="col-md-4" id="project_select_wrapper" {% if filter_type != 'project' %}style="display: none;"{% endif %}>
+        <label for="project_id" class="form-label">プロジェクト</label>
+        <select name="project_id" id="project_id" class="form-select">
+          <option value="">-- プロジェクトを選択 --</option>
+          {% for project in projects %}
+          <option value="{{ project.id }}" {% if selected_project_id == project.id|stringformat:"s" %}selected{% endif %}>
+            {{ project.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-search me-1"></i>表示更新
+        </button>
+        <a href="{% url 'statistics' %}" class="btn btn-outline-secondary ms-2">
+          <i class="bi bi-arrow-clockwise me-1"></i>リセット
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- SUMMARY_STATISTICS -->
+  {% if statistics %}
+  <div class="row mb-4">
+    <div class="col-12">
+      <h5 class="mb-3">
+        <i class="bi bi-graph-up me-2"></i>
+        {% if statistics.type == 'global' %}
+          システム全体の統計
+        {% elif statistics.type == 'project' %}
+          プロジェクト「{{ statistics.project_name }}」の統計
+        {% elif statistics.type == 'user' %}
+          {{ statistics.user_name }} さんの統計
+        {% endif %}
+      </h5>
+    </div>
+  </div>
+
+  <!-- 基本統計カード -->
+  <div class="row mb-4">
+    {% if statistics.type == 'global' %}
+    <div class="col-md-3 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body text-center">
+          <div class="stats-number text-info">{{ statistics.total_projects }}</div>
+          <div class="stats-label text-muted">総プロジェクト数</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body text-center">
+          <div class="stats-number text-primary">{{ statistics.total_issues }}</div>
+          <div class="stats-label text-muted">総チケット数</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body text-center">
+          <div class="stats-number text-warning">{{ statistics.open }}</div>
+          <div class="stats-label text-muted">未完了</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body text-center">
+          <div class="stats-number text-success">{{ statistics.closed }}</div>
+          <div class="stats-label text-muted">完了済み</div>
+        </div>
+      </div>
+    </div>
+    {% elif statistics.type == 'project' %}
+    <div class="col-md-4 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body text-center">
+          <div class="stats-number text-primary">{{ statistics.total_issues }}</div>
+          <div class="stats-label text-muted">総チケット数</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body text-center">
+          <div class="stats-number text-warning">{{ statistics.open }}</div>
+          <div class="stats-label text-muted">未完了</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body text-center">
+          <div class="stats-number text-success">{{ statistics.closed }}</div>
+          <div class="stats-label text-muted">完了済み</div>
+        </div>
+      </div>
+    </div>
+    {% elif statistics.type == 'user' %}
+    <div class="col-md-6 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="bi bi-plus-circle me-1"></i>作成したチケット</h6>
+          <div class="row text-center">
+            <div class="col-4">
+              <div class="stats-number text-primary">{{ statistics.created_issues.total }}</div>
+              <div class="stats-label text-muted">総数</div>
+            </div>
+            <div class="col-4">
+              <div class="stats-number text-warning">{{ statistics.created_issues.open }}</div>
+              <div class="stats-label text-muted">未完了</div>
+            </div>
+            <div class="col-4">
+              <div class="stats-number text-success">{{ statistics.created_issues.closed }}</div>
+              <div class="stats-label text-muted">完了</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body">
+          <h6 class="card-title"><i class="bi bi-person-check me-1"></i>担当チケット</h6>
+          <div class="row text-center">
+            <div class="col-4">
+              <div class="stats-number text-primary">{{ statistics.assigned_issues.total }}</div>
+              <div class="stats-label text-muted">総数</div>
+            </div>
+            <div class="col-4">
+              <div class="stats-number text-warning">{{ statistics.assigned_issues.open }}</div>
+              <div class="stats-label text-muted">未完了</div>
+            </div>
+            <div class="col-4">
+              <div class="stats-number text-success">{{ statistics.assigned_issues.closed }}</div>
+              <div class="stats-label text-muted">完了</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-12 mb-3">
+      <div class="card stats-card h-100">
+        <div class="card-body text-center">
+          <div class="stats-number text-info">{{ statistics.comments }}</div>
+          <div class="stats-label text-muted">投稿コメント数</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 詳細内訳 -->
+  <div class="row">
+    <!-- ステータス別内訳 -->
+    <div class="col-md-6 mb-4">
+      <div class="card breakdown-card">
+        <div class="card-body">
+          <h6 class="card-title"><i class="bi bi-list-task me-2"></i>ステータス別内訳</h6>
+          {% if status_breakdown %}
+          {% for status, count in status_breakdown.items %}
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span>{{ status }}</span>
+            <span class="badge bg-secondary">{{ count }}</span>
+          </div>
+          {% endfor %}
+          {% else %}
+          <p class="text-muted mb-0">データがありません</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- 優先度別内訳 -->
+    <div class="col-md-6 mb-4">
+      <div class="card breakdown-card">
+        <div class="card-body">
+          <h6 class="card-title"><i class="bi bi-flag me-2"></i>優先度別内訳</h6>
+          {% if priority_breakdown %}
+          {% for priority, count in priority_breakdown.items %}
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span>
+              {% if priority == 'Critical' %}
+                <i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>緊急
+              {% elif priority == 'High' %}
+                <i class="bi bi-exclamation-circle-fill text-warning me-1"></i>高
+              {% elif priority == 'Medium' %}
+                <i class="bi bi-dash-circle-fill text-info me-1"></i>中
+              {% elif priority == 'Low' %}
+                <i class="bi bi-circle text-secondary me-1"></i>低
+              {% else %}
+                {{ priority }}
+              {% endif %}
+            </span>
+            <span class="badge bg-secondary">{{ count }}</span>
+          </div>
+          {% endfor %}
+          {% else %}
+          <p class="text-muted mb-0">データがありません</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 完了率プログレスバー（プロジェクト統計の場合） -->
+  {% if statistics.type == 'project' and statistics.total_issues > 0 %}
+  <div class="row">
+    <div class="col-12">
+      <div class="card breakdown-card">
+        <div class="card-body">
+          <h6 class="card-title"><i class="bi bi-graph-up me-2"></i>完了進捗</h6>
+          {% with completion_rate=statistics.closed|floatformat:0|add:0 total=statistics.total_issues|floatformat:0|add:0 %}
+          {% widthratio completion_rate total 100 as progress_percent %}
+          <div class="d-flex justify-content-between mb-2">
+            <span>完了進捗</span>
+            <span>{{ completion_rate }}/{{ total }} ({{ progress_percent }}%)</span>
+          </div>
+          <div class="progress progress-custom">
+            <div class="progress-bar bg-success" style="width: {{ progress_percent }}%"></div>
+          </div>
+          {% endwith %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="row">
+    <div class="col-12">
+      <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        統計データがありません。フィルターを変更して再試行してください。
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleProjectSelect() {
+  const filterType = document.getElementById('filter_type').value;
+  const projectWrapper = document.getElementById('project_select_wrapper');
+  
+  if (filterType === 'project') {
+    projectWrapper.style.display = 'block';
+  } else {
+    projectWrapper.style.display = 'none';
+  }
+}
+
+// 印刷時のスタイル調整
+window.addEventListener('beforeprint', () => {
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.style.display = 'none';
+  });
+});
+
+window.addEventListener('afterprint', () => {
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.style.display = '';
+  });
+});
+</script>
+{% endblock %}

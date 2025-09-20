@@ -85,4 +85,7 @@ urlpatterns = [
     
     # System Settings UI routes
     path('settings/', tracker_views.system_settings_view, name='system_settings'),
+    
+    # Statistics UI routes  
+    path('stats/', tracker_views.statistics_view, name='statistics'),
 ]

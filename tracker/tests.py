@@ -3145,3 +3145,154 @@ class SystemSettingsUITest(TestCase):
 		
 		# アクティブタブの確認
 		self.assertContains(response, 'nav-link active')
+
+
+class StatisticsUITest(TestCase):
+	"""
+	統計情報画面UIテスト - UT-701/702対応
+	"""
+	
+	def setUp(self):
+		"""テストデータ準備"""
+		# 管理者ユーザー作成
+		self.admin_user = User.objects.create_user(
+			username='admin',
+			email='admin@example.com',
+			password='adminpass',
+			is_staff=True
+		)
+		
+		# 一般ユーザー作成  
+		self.regular_user = User.objects.create_user(
+			username='user',
+			email='user@example.com',
+			password='userpass'
+		)
+		
+		# プロジェクト作成
+		self.project = Project.objects.create(
+			name='テストプロジェクト',
+			description='テスト用プロジェクト',
+			created_by=self.admin_user
+		)
+		
+		# チケット作成
+		self.issue1 = Issue.objects.create(
+			title='テストチケット1',
+			description='テスト用チケット1',
+			project=self.project,
+			created_by=self.admin_user,
+			priority='High',
+			status='open'
+		)
+		
+		self.issue2 = Issue.objects.create(
+			title='テストチケット2', 
+			description='テスト用チケット2',
+			project=self.project,
+			created_by=self.regular_user,
+			priority='Medium',
+			status='closed'
+		)
+
+	def test_statistics_page_display_success(self):
+		"""UT-701: 統計情報画面表示成功テスト（正常系）"""
+		self.client.login(username='admin', password='adminpass')
+		
+		response = self.client.get('/stats/')
+		
+		# 正常レスポンス確認
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, '統計情報')
+		self.assertContains(response, 'システム全体の統計')
+		
+		# 統計データ表示確認
+		self.assertContains(response, '総プロジェクト数')
+		self.assertContains(response, '総チケット数')
+		self.assertContains(response, '未完了')
+		self.assertContains(response, '完了済み')
+		
+		# フィルター機能確認
+		self.assertContains(response, 'フィルター設定')
+		self.assertContains(response, '全体統計')
+		self.assertContains(response, 'プロジェクト別')
+		self.assertContains(response, '個人統計')
+
+	def test_statistics_page_permission_denied(self):
+		"""UT-702: 権限なしアクセス拒否テスト（異常系）"""
+		# 一般ユーザーでアクセス
+		self.client.login(username='user', password='userpass') 
+		
+		response = self.client.get('/stats/')
+		
+		# 権限拒否確認（リダイレクトまたは403）
+		self.assertIn(response.status_code, [302, 403])
+
+	def test_statistics_page_unauthenticated_redirect(self):
+		"""UT-702: 未認証ユーザーリダイレクトテスト（異常系）"""
+		response = self.client.get('/stats/')
+		
+		# ログイン画面へリダイレクト確認
+		self.assertEqual(response.status_code, 302)
+		self.assertTrue(response.url.startswith('/login/'))
+
+	def test_statistics_project_filter(self):
+		"""UT-701: プロジェクト別統計フィルターテスト（正常系）"""
+		self.client.login(username='admin', password='adminpass')
+		
+		response = self.client.get(f'/stats/?filter_type=project&project_id={self.project.id}')
+		
+		# 正常レスポンス確認
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, f'プロジェクト「{self.project.name}」の統計')
+
+	def test_statistics_user_filter(self):
+		"""UT-701: ユーザー別統計フィルターテスト（正常系）"""
+		self.client.login(username='admin', password='adminpass')
+		
+		response = self.client.get('/stats/?filter_type=user')
+		
+		# 正常レスポンス確認
+		self.assertEqual(response.status_code, 200) 
+		self.assertContains(response, f'{self.admin_user.username} さんの統計')
+		self.assertContains(response, '作成したチケット')
+		self.assertContains(response, '担当チケット')
+
+	def test_statistics_invalid_project_filter(self):
+		"""UT-702: 無効プロジェクトフィルターテスト（異常系）"""
+		self.client.login(username='admin', password='adminpass')
+		
+		response = self.client.get('/stats/?filter_type=project&project_id=999')
+		
+		# エラー時はダッシュボードへリダイレクト
+		self.assertEqual(response.status_code, 302)
+		self.assertTrue(response.url.endswith('/dashboard/'))
+		
+	def test_statistics_breakdown_display(self):
+		"""UT-701: ステータス・優先度別内訳表示テスト（正常系）"""
+		self.client.login(username='admin', password='adminpass')
+		
+		response = self.client.get('/stats/')
+		
+		# 内訳セクション表示確認
+		self.assertContains(response, 'ステータス別内訳')
+		self.assertContains(response, '優先度別内訳')
+
+	def test_statistics_navigation_link(self):
+		"""UT-701: ナビゲーション統計リンクテスト（正常系）"""
+		self.client.login(username='admin', password='adminpass')
+		
+		response = self.client.get('/dashboard/')
+		
+		# 管理者用統計リンク表示確認
+		self.assertContains(response, '統計情報')
+		self.assertContains(response, 'href="/stats/"')
+
+	def test_statistics_regular_user_no_nav_link(self):
+		"""UT-702: 一般ユーザー統計リンク非表示テスト（異常系）"""
+		self.client.login(username='user', password='userpass')
+		
+		response = self.client.get('/dashboard/')
+		
+		# 一般ユーザーには統計リンク非表示確認
+		self.assertNotContains(response, 'href="/stats/"')
