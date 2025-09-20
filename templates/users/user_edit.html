@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}ユーザー編集 - {{ user.username }} | Issue Tracker{% endblock %}
+
+{% block extra_head %}
+<style>
+.form-section {
+  background: #f8f9fa;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.form-section h5 {
+  color: #495057;
+  margin-bottom: 1rem;
+}
+.required-field::after {
+  content: " *";
+  color: #dc3545;
+}
+.user-info-badge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h2 class="mb-1">
+          <i class="bi bi-person-gear me-2"></i>ユーザー編集
+        </h2>
+        <p class="text-muted mb-0">{{ user.username }} のアカウント情報を編集</p>
+      </div>
+      <a href="{% url 'user_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>戻る
+      </a>
+    </div>
+
+    <!-- User Info Card -->
+    <div class="card mb-4 user-info-badge text-white">
+      <div class="card-body">
+        <div class="d-flex align-items-center">
+          <div class="bg-white text-dark rounded-circle d-flex align-items-center justify-content-center me-3" 
+               style="width: 60px; height: 60px; font-size: 1.5rem; font-weight: bold;">
+            {% if user.first_name %}
+              {{ user.first_name|first }}
+            {% else %}
+              {{ user.username|first|upper }}
+            {% endif %}
+          </div>
+          <div class="flex-grow-1">
+            <h5 class="mb-1">{{ user.username }}</h5>
+            <p class="mb-1">{{ user.email }}</p>
+            <div class="d-flex gap-2">
+              {% if user.is_superuser %}
+                <span class="badge bg-danger">スーパーユーザー</span>
+              {% elif user.is_staff %}
+                <span class="badge bg-info">スタッフ</span>
+              {% else %}
+                <span class="badge bg-light text-dark">一般ユーザー</span>
+              {% endif %}
+              {% if user.is_active %}
+                <span class="badge bg-success">アクティブ</span>
+              {% else %}
+                <span class="badge bg-secondary">非アクティブ</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="text-end">
+            <small>登録日: {{ user.date_joined|date:"Y/m/d" }}</small><br>
+            <small>最終更新: {{ user.date_joined|date:"Y/m/d" }}</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <div class="card">
+      <div class="card-body">
+        <form method="POST" novalidate>
+          {% csrf_token %}
+          
+          <!-- Basic Information -->
+          <div class="form-section">
+            <h5><i class="bi bi-person me-2"></i>基本情報</h5>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.username.id_for_label }}" class="form-label required-field">
+                  {{ form.username.label }}
+                </label>
+                {{ form.username }}
+                {% if form.username.help_text %}
+                  <div class="form-text">{{ form.username.help_text }}</div>
+                {% endif %}
+                {% if form.username.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.username.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.email.id_for_label }}" class="form-label required-field">
+                  {{ form.email.label }}
+                </label>
+                {{ form.email }}
+                {% if form.email.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.email.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.last_name.id_for_label }}" class="form-label">
+                  {{ form.last_name.label }}
+                </label>
+                {{ form.last_name }}
+                {% if form.last_name.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.last_name.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.first_name.id_for_label }}" class="form-label">
+                  {{ form.first_name.label }}
+                </label>
+                {{ form.first_name }}
+                {% if form.first_name.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.first_name.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Permissions -->
+          <div class="form-section">
+            <h5><i class="bi bi-shield-check me-2"></i>権限設定</h5>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <div class="form-check">
+                  {{ form.is_active }}
+                  <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                    {{ form.is_active.label }}
+                  </label>
+                  <div class="form-text">
+                    チェックを外すとユーザーはログインできません
+                    {% if user.id == request.user.id %}
+                      <br><strong class="text-warning">注意: 自分自身を非アクティブにしないでください</strong>
+                    {% endif %}
+                  </div>
+                </div>
+                {% if form.is_active.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.is_active.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="col-md-6 mb-3">
+                <div class="form-check">
+                  {{ form.is_staff }}
+                  <label class="form-check-label" for="{{ form.is_staff.id_for_label }}">
+                    {{ form.is_staff.label }}
+                  </label>
+                  <div class="form-text">スタッフは管理機能にアクセスできます</div>
+                </div>
+                {% if form.is_staff.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.is_staff.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Password Reset Section -->
+          <div class="form-section">
+            <h5><i class="bi bi-key me-2"></i>パスワード管理</h5>
+            <div class="alert alert-info" role="alert">
+              <i class="bi bi-info-circle me-2"></i>
+              パスワードを変更する場合は、専用のパスワードリセット機能をご利用ください。
+            </div>
+            <a href="{% url 'user_password_reset' user.id %}" class="btn btn-outline-primary">
+              <i class="bi bi-key me-1"></i>パスワードをリセット
+            </a>
+          </div>
+
+          <!-- Non-field errors -->
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger" role="alert">
+              {% for error in form.non_field_errors %}
+                {{ error }}
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <!-- Form Actions -->
+          <div class="d-flex justify-content-end">
+            <a href="{% url 'user_list' %}" class="btn btn-secondary me-2">
+              <i class="bi bi-x-circle me-1"></i>キャンセル
+            </a>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-circle me-1"></i>変更を保存
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Form validation feedback
+    const form = document.querySelector('form');
+    const inputs = form.querySelectorAll('input, select, textarea');
+    
+    inputs.forEach(input => {
+        input.addEventListener('invalid', function(e) {
+            this.classList.add('is-invalid');
+        });
+        
+        input.addEventListener('input', function(e) {
+            if (this.checkValidity()) {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            } else {
+                this.classList.remove('is-valid');
+            }
+        });
+    });
+    
+    // Warn before deactivating self
+    const isActiveCheckbox = document.getElementById('{{ form.is_active.id_for_label }}');
+    {% if user.id == request.user.id %}
+    if (isActiveCheckbox) {
+        isActiveCheckbox.addEventListener('change', function() {
+            if (!this.checked) {
+                if (!confirm('自分自身を非アクティブにすると、ログアウト後に再ログインできなくなります。本当に実行しますか？')) {
+                    this.checked = true;
+                }
+            }
+        });
+    }
+    {% endif %}
+});
+</script>
+{% endblock %}

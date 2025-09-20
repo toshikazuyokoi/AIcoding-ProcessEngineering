@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}ユーザー削除確認 - {{ user.username }} | Issue Tracker{% endblock %}
+
+{% block extra_head %}
+<style>
+.danger-zone {
+  border: 2px solid #dc3545;
+  border-radius: 0.5rem;
+  background: #fff5f5;
+}
+.user-danger-info {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h2 class="mb-1 text-danger">
+          <i class="bi bi-exclamation-triangle me-2"></i>ユーザー削除確認
+        </h2>
+        <p class="text-muted mb-0">この操作は取り消すことができません</p>
+      </div>
+      <a href="{% url 'user_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>戻る
+      </a>
+    </div>
+
+    <!-- User Info Card -->
+    <div class="card mb-4 user-danger-info text-white">
+      <div class="card-body">
+        <div class="d-flex align-items-center">
+          <div class="bg-white text-danger rounded-circle d-flex align-items-center justify-content-center me-3" 
+               style="width: 60px; height: 60px; font-size: 1.5rem; font-weight: bold;">
+            <i class="bi bi-person-x"></i>
+          </div>
+          <div class="flex-grow-1">
+            <h5 class="mb-1">{{ user.username }}</h5>
+            <p class="mb-1">{{ user.email }}</p>
+            <div class="d-flex gap-2">
+              {% if user.is_superuser %}
+                <span class="badge bg-danger">スーパーユーザー</span>
+              {% elif user.is_staff %}
+                <span class="badge bg-info">スタッフ</span>
+              {% else %}
+                <span class="badge bg-light text-dark">一般ユーザー</span>
+              {% endif %}
+              {% if user.is_active %}
+                <span class="badge bg-success">アクティブ</span>
+              {% else %}
+                <span class="badge bg-secondary">非アクティブ</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="text-end">
+            <small>登録日: {{ user.date_joined|date:"Y/m/d" }}</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="danger-zone p-4">
+      <h4 class="text-danger mb-3">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>危険な操作
+      </h4>
+      
+      <div class="alert alert-danger" role="alert">
+        <h6 class="alert-heading">
+          <i class="bi bi-exclamation-circle me-2"></i>削除の影響について
+        </h6>
+        <p class="mb-2">以下のデータが完全に削除されます：</p>
+        <ul class="mb-2">
+          <li>ユーザーアカウント情報</li>
+          <li>作成したプロジェクト（他のユーザーも影響を受けます）</li>
+          <li>作成したチケット・コメント</li>
+          <li>通知履歴</li>
+        </ul>
+        <p class="mb-0 fw-bold">この操作は取り消すことができません。</p>
+      </div>
+
+      <!-- Statistics -->
+      <div class="row mb-4">
+        <div class="col-md-4">
+          <div class="card bg-light">
+            <div class="card-body text-center p-3">
+              <i class="bi bi-folder-fill text-primary fs-4"></i>
+              <div class="mt-2">
+                <h6 class="mb-0">{{ user.created_projects.count }}</h6>
+                <small class="text-muted">作成プロジェクト</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card bg-light">
+            <div class="card-body text-center p-3">
+              <i class="bi bi-bug-fill text-warning fs-4"></i>
+              <div class="mt-2">
+                <h6 class="mb-0">{{ user.created_issues.count }}</h6>
+                <small class="text-muted">作成チケット</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card bg-light">
+            <div class="card-body text-center p-3">
+              <i class="bi bi-chat-fill text-info fs-4"></i>
+              <div class="mt-2">
+                <h6 class="mb-0">{{ user.comment_set.count }}</h6>
+                <small class="text-muted">コメント数</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Confirmation Form -->
+      <form method="POST">
+        {% csrf_token %}
+        <div class="mb-4">
+          <label for="confirmation" class="form-label fw-bold">
+            削除を確認するには、「<span class="text-danger">{{ user.username }}</span>」を入力してください：
+          </label>
+          <input type="text" 
+                 id="confirmation" 
+                 name="confirmation" 
+                 class="form-control" 
+                 placeholder="{{ user.username }}"
+                 required>
+        </div>
+
+        <div class="d-flex justify-content-end">
+          <a href="{% url 'user_list' %}" class="btn btn-secondary me-2">
+            <i class="bi bi-x-circle me-1"></i>キャンセル
+          </a>
+          <button type="submit" class="btn btn-danger" id="deleteButton" disabled>
+            <i class="bi bi-trash me-1"></i>完全に削除する
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const confirmationInput = document.getElementById('confirmation');
+    const deleteButton = document.getElementById('deleteButton');
+    const expectedUsername = '{{ user.username }}';
+    
+    confirmationInput.addEventListener('input', function() {
+        if (this.value === expectedUsername) {
+            deleteButton.disabled = false;
+            deleteButton.classList.remove('btn-secondary');
+            deleteButton.classList.add('btn-danger');
+        } else {
+            deleteButton.disabled = true;
+            deleteButton.classList.remove('btn-danger');
+            deleteButton.classList.add('btn-secondary');
+        }
+    });
+    
+    // Final confirmation before submit
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (confirmationInput.value === expectedUsername) {
+            if (confirm(`本当にユーザー「${expectedUsername}」を削除しますか？\n\nこの操作は取り消すことができません。`)) {
+                // Show loading state
+                deleteButton.innerHTML = '<div class="spinner-border spinner-border-sm me-2" role="status"></div>削除中...';
+                deleteButton.disabled = true;
+                // Submit form
+                this.submit();
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

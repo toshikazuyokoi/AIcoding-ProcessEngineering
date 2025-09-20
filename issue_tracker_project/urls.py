@@ -63,4 +63,12 @@ urlpatterns = [
     path('login/', tracker_views.login_view, name='login'),
     path('logout/', tracker_views.logout_view, name='logout'),
     path('dashboard/', tracker_views.dashboard_view, name='dashboard'),
+    
+    # User Management UI routes
+    path('users/', tracker_views.user_list_view, name='user_list'),
+    path('users/add/', tracker_views.user_create_view, name='user_create'),
+    path('users/<int:user_id>/edit/', tracker_views.user_edit_view, name='user_edit'),
+    path('users/<int:user_id>/delete/', tracker_views.user_delete_view, name='user_delete'),
+    path('users/<int:user_id>/password-reset/', tracker_views.user_password_reset_view, name='user_password_reset'),
+    path('users/<int:user_id>/toggle-active/', tracker_views.user_toggle_active_view, name='user_toggle_active'),
 ]

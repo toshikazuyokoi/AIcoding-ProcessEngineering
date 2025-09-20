@@ -2,6 +2,9 @@ from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.contrib.messages.middleware import MessageMiddleware
+from django.contrib.messages.storage.fallback import FallbackStorage
 import json
 from tracker.models import Project, ProjectMember, Issue, IssueHistory, Comment, Notification, SystemSettings, Statistics
 from tracker.services.user_service import UserService
@@ -2078,4 +2081,408 @@ class AuthenticationUITest(TestCase):
         response = self.client.get('/logout/')
         self.assertEqual(response.status_code, 302)
         self.assertIn('/login', response.url)
+
+
+class UserManagementUITest(TestCase):
+    """ユーザー管理UI機能のテストクラス"""
+    
+    def setUp(self):
+        """テスト用データの準備"""
+        self.factory = RequestFactory()
+        
+        # テスト用ユーザー作成
+        self.admin_user = User.objects.create_user(
+            username='admin',
+            email='admin@example.com',
+            password='admin123',
+            is_staff=True,
+            is_superuser=False
+        )
+        
+        self.regular_user = User.objects.create_user(
+            username='regular',
+            email='regular@example.com',
+            password='regular123',
+            is_staff=False
+        )
+        
+        self.test_user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='test123',
+            is_staff=False
+        )
+
+    def _setup_request_middleware(self, request, user):
+        """RequestオブジェクトにSessionとMessageMiddlewareを設定"""
+        # Session middleware setup
+        middleware = SessionMiddleware()
+        middleware.process_request(request)
+        request.session.save()
+        
+        # User assignment
+        request.user = user
+        
+        # Messages middleware setup
+        messages_middleware = MessageMiddleware()
+        messages_middleware.process_request(request)
+        request._messages = FallbackStorage(request)
+        
+        return request
+
+    def test_user_list_requires_staff_permission(self):
+        """ユーザー一覧表示はスタッフ権限が必要"""
+        # Regular user cannot access
+        self.client.force_login(self.regular_user)
+        response = self.client.get('/users/')
+        self.assertEqual(response.status_code, 302)  # Redirect due to permission denied
+        
+        # Staff user can access
+        self.client.force_login(self.admin_user)
+        response = self.client.get('/users/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_user_list_display(self):
+        """ユーザー一覧の正常表示テスト (UT-101)"""
+        self.client.force_login(self.admin_user)
+        response = self.client.get('/users/')
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ユーザー管理')
+        self.assertContains(response, self.admin_user.username)
+        self.assertContains(response, self.regular_user.username)
+        self.assertContains(response, self.test_user.username)
+
+    def test_user_create_get(self):
+        """ユーザー作成画面の表示テスト"""
+        self.client.force_login(self.admin_user)
+        response = self.client.get('/users/add/')
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '新規ユーザー作成')
+        self.assertContains(response, 'ユーザー名')
+        self.assertContains(response, 'メールアドレス')
+
+    def test_user_create_success(self):
+        """ユーザー作成の正常系テスト (UT-104)"""
+        self.client.force_login(self.admin_user)
+        
+        user_data = {
+            'username': 'newuser',
+            'email': 'newuser@example.com',
+            'password1': 'newpass123',
+            'password2': 'newpass123',
+            'is_active': True,
+            'is_staff': False
+        }
+        
+        response = self.client.post('/users/add/', user_data)
+        self.assertEqual(response.status_code, 302)  # Redirect after successful creation
+        
+        # Verify user was created
+        new_user = User.objects.get(username='newuser')
+        self.assertEqual(new_user.email, 'newuser@example.com')
+        self.assertTrue(new_user.is_active)
+        self.assertFalse(new_user.is_staff)
+
+    def test_user_create_duplicate_email(self):
+        """ユーザー作成での重複メールエラーテスト (UT-105)"""
+        self.client.force_login(self.admin_user)
+        
+        user_data = {
+            'username': 'duplicate',
+            'email': 'admin@example.com',  # Already exists
+            'password1': 'newpass123',
+            'password2': 'newpass123',
+            'is_active': True,
+            'is_staff': False
+        }
+        
+        response = self.client.post('/users/add/', user_data)
+        self.assertEqual(response.status_code, 200)  # Form validation error, no redirect
+        self.assertContains(response, 'このメールアドレスは既に使用されています')
+
+    def test_user_create_validation_errors(self):
+        """ユーザー作成での境界値・バリデーションテスト (UT-106)"""
+        self.client.force_login(self.admin_user)
+        
+        # Empty username
+        response = self.client.post('/users/add/', {
+            'username': '',
+            'email': 'empty@example.com',
+            'password1': 'password123',
+            'password2': 'password123',
+        })
+        self.assertEqual(response.status_code, 200)
+        
+        # Invalid email format
+        response = self.client.post('/users/add/', {
+            'username': 'validuser',
+            'email': 'invalid-email',
+            'password1': 'password123',
+            'password2': 'password123',
+        })
+        self.assertEqual(response.status_code, 200)
+
+    def test_user_edit_get(self):
+        """ユーザー編集画面の表示テスト"""
+        self.client.force_login(self.admin_user)
+        response = self.client.get(f'/users/{self.test_user.id}/edit/')
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ユーザー編集')
+        self.assertContains(response, self.test_user.username)
+
+    def test_user_edit_success(self):
+        """ユーザー編集の正常系テスト (UT-102)"""
+        self.client.force_login(self.admin_user)
+        
+        edit_data = {
+            'username': 'editeduser',
+            'email': 'edited@example.com',
+            'first_name': 'Edited',
+            'last_name': 'User',
+            'is_active': True,
+            'is_staff': True
+        }
+        
+        response = self.client.post(f'/users/{self.test_user.id}/edit/', edit_data)
+        self.assertEqual(response.status_code, 302)  # Redirect after successful edit
+        
+        # Verify changes
+        self.test_user.refresh_from_db()
+        self.assertEqual(self.test_user.username, 'editeduser')
+        self.assertEqual(self.test_user.email, 'edited@example.com')
+        self.assertEqual(self.test_user.first_name, 'Edited')
+        self.assertTrue(self.test_user.is_staff)
+
+    def test_user_delete_get(self):
+        """ユーザー削除確認画面の表示テスト"""
+        self.client.force_login(self.admin_user)
+        response = self.client.get(f'/users/{self.test_user.id}/delete/')
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ユーザー削除確認')
+        self.assertContains(response, self.test_user.username)
+        self.assertContains(response, '危険な操作')
+
+    def test_user_delete_success(self):
+        """ユーザー削除の正常系テスト (UT-103)"""
+        self.client.force_login(self.admin_user)
+        user_id = self.test_user.id
+        
+        response = self.client.post(f'/users/{user_id}/delete/')
+        self.assertEqual(response.status_code, 302)  # Redirect after deletion
+        
+        # Verify user was deleted
+        self.assertFalse(User.objects.filter(id=user_id).exists())
+
+    def test_user_delete_self_protection(self):
+        """自分自身の削除防止テスト"""
+        self.client.force_login(self.admin_user)
+        
+        response = self.client.post(f'/users/{self.admin_user.id}/delete/')
+        self.assertEqual(response.status_code, 302)  # Redirects with error
+        
+        # Verify user was not deleted
+        self.assertTrue(User.objects.filter(id=self.admin_user.id).exists())
+
+    def test_user_password_reset_get(self):
+        """パスワードリセット画面の表示テスト"""
+        self.client.force_login(self.admin_user)
+        response = self.client.get(f'/users/{self.test_user.id}/password-reset/')
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'パスワードリセット')
+        self.assertContains(response, self.test_user.username)
+
+    def test_user_password_reset_success(self):
+        """パスワードリセットの正常系テスト"""
+        self.client.force_login(self.admin_user)
+        
+        reset_data = {
+            'new_password1': 'newpassword123',
+            'new_password2': 'newpassword123'
+        }
+        
+        response = self.client.post(f'/users/{self.test_user.id}/password-reset/', reset_data)
+        self.assertEqual(response.status_code, 302)  # Redirect after successful reset
+        
+        # Verify password was changed
+        self.test_user.refresh_from_db()
+        self.assertTrue(self.test_user.check_password('newpassword123'))
+
+    def test_user_search_functionality(self):
+        """ユーザー検索機能のテスト"""
+        self.client.force_login(self.admin_user)
+        
+        # Search by username
+        response = self.client.get('/users/', {'search': 'admin'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.admin_user.username)
+        self.assertNotContains(response, self.regular_user.username)
+
+    def test_user_filter_by_status(self):
+        """ユーザーステータスフィルターのテスト"""
+        self.client.force_login(self.admin_user)
+        
+        # Create inactive user
+        inactive_user = User.objects.create_user(
+            username='inactive',
+            email='inactive@example.com',
+            password='inactive123',
+            is_active=False
+        )
+        
+        # Filter active users
+        response = self.client.get('/users/', {'is_active': 'true'})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, inactive_user.username)
+
+    def test_user_toggle_active_ajax(self):
+        """ユーザーアクティブ状態切り替えAJAXテスト"""
+        self.client.force_login(self.admin_user)
+        
+        original_status = self.test_user.is_active
+        response = self.client.post(f'/users/{self.test_user.id}/toggle-active/')
+        
+        self.assertEqual(response.status_code, 200)
+        response_data = json.loads(response.content)
+        self.assertTrue(response_data['success'])
+        
+        # Verify status was toggled
+        self.test_user.refresh_from_db()
+        self.assertEqual(self.test_user.is_active, not original_status)
+
+    def test_user_management_pagination(self):
+        """ユーザー一覧のページネーションテスト"""
+        # Create many users to test pagination
+        for i in range(25):
+            User.objects.create_user(
+                username=f'user{i}',
+                email=f'user{i}@example.com',
+                password='password123'
+            )
+        
+        self.client.force_login(self.admin_user)
+        response = self.client.get('/users/')
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'page-link')  # Pagination controls present
+
+    def test_user_management_requires_login(self):
+        """ユーザー管理機能は認証が必要"""
+        response = self.client.get('/users/')
+        self.assertEqual(response.status_code, 302)  # Redirect to login
+
+    def test_user_management_permission_checks(self):
+        """各ユーザー管理機能の権限チェック"""
+        # Test all user management views require staff permission
+        urls_to_test = [
+            '/users/',
+            '/users/add/',
+            f'/users/{self.test_user.id}/edit/',
+            f'/users/{self.test_user.id}/delete/',
+            f'/users/{self.test_user.id}/password-reset/',
+        ]
+        
+        # Regular user should be denied access
+        self.client.force_login(self.regular_user)
+        for url in urls_to_test:
+            response = self.client.get(url)
+            self.assertNotEqual(response.status_code, 200, f"Regular user should not access {url}")
+
+
+class UserFormTest(TestCase):
+    """ユーザー管理フォームのテストクラス"""
+    
+    def setUp(self):
+        self.existing_user = User.objects.create_user(
+            username='existing',
+            email='existing@example.com',
+            password='existing123'
+        )
+
+    def test_user_create_form_validation(self):
+        """ユーザー作成フォームのバリデーションテスト"""
+        from tracker.forms import UserCreateForm
+        
+        # Valid data
+        valid_data = {
+            'username': 'newuser',
+            'email': 'newuser@example.com',
+            'password1': 'newpass123',
+            'password2': 'newpass123',
+            'is_active': True,
+            'is_staff': False
+        }
+        form = UserCreateForm(data=valid_data)
+        self.assertTrue(form.is_valid())
+        
+        # Duplicate username
+        duplicate_username = valid_data.copy()
+        duplicate_username['username'] = 'existing'
+        form = UserCreateForm(data=duplicate_username)
+        self.assertFalse(form.is_valid())
+        self.assertIn('username', form.errors)
+        
+        # Duplicate email
+        duplicate_email = valid_data.copy()
+        duplicate_email['email'] = 'existing@example.com'
+        form = UserCreateForm(data=duplicate_email)
+        self.assertFalse(form.is_valid())
+        self.assertIn('email', form.errors)
+
+    def test_user_edit_form_validation(self):
+        """ユーザー編集フォームのバリデーションテスト"""
+        from tracker.forms import UserEditForm
+        
+        # Valid data
+        valid_data = {
+            'username': 'edited',
+            'email': 'edited@example.com',
+            'is_active': True,
+            'is_staff': False
+        }
+        form = UserEditForm(data=valid_data, instance=self.existing_user)
+        self.assertTrue(form.is_valid())
+        
+        # Same user can keep same username/email
+        same_data = {
+            'username': 'existing',
+            'email': 'existing@example.com',
+            'is_active': True,
+            'is_staff': False
+        }
+        form = UserEditForm(data=same_data, instance=self.existing_user)
+        self.assertTrue(form.is_valid())
+
+    def test_user_search_form_filter(self):
+        """ユーザー検索フォームのフィルター機能テスト"""
+        from tracker.forms import UserSearchForm
+        
+        # Clear existing users to avoid interference
+        User.objects.all().delete()
+        
+        # Create test users
+        User.objects.create_user(username='testactive', email='testactive@example.com', is_active=True)
+        User.objects.create_user(username='testinactive', email='testinactive@example.com', is_active=False)
+        User.objects.create_user(username='teststaff', email='teststaff@example.com', is_staff=True, is_active=True)
+        
+        queryset = User.objects.all()
+        
+        # Test search filter
+        form = UserSearchForm(data={'search': 'testactive'})
+        self.assertTrue(form.is_valid())
+        filtered = form.filter_queryset(queryset)
+        # Should find exactly the 'testactive' user
+        self.assertEqual(filtered.count(), 1)
+        self.assertEqual(filtered.first().username, 'testactive')
+        
+        # Test active filter
+        form = UserSearchForm(data={'is_active': 'true'})
+        self.assertTrue(form.is_valid())
+        filtered = form.filter_queryset(queryset)
+        active_count = User.objects.filter(is_active=True).count()
+        self.assertEqual(filtered.count(), active_count)
 

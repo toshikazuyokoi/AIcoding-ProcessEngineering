@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}ユーザー管理 | Issue Tracker{% endblock %}
+
+{% block extra_head %}
+<style>
+.user-stats-card {
+  border-radius: 0.5rem;
+  transition: transform 0.2s;
+}
+.user-stats-card:hover {
+  transform: translateY(-2px);
+}
+.user-avatar {
+  width: 40px;
+  height: 40px;
+}
+.table-actions {
+  white-space: nowrap;
+}
+.status-badge {
+  font-size: 0.75rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header Section -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="mb-1">
+      <i class="bi bi-people-fill me-2"></i>ユーザー管理
+    </h2>
+    <p class="text-muted mb-0">システムユーザーの管理・設定</p>
+  </div>
+  <a href="{% url 'user_create' %}" class="btn btn-primary">
+    <i class="bi bi-person-plus me-1"></i>新規ユーザー追加
+  </a>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+  <div class="col-md-4">
+    <div class="card user-stats-card bg-primary text-white">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="card-title mb-0">{{ total_users }}</h5>
+            <p class="card-text small mb-0">総ユーザー数</p>
+          </div>
+          <i class="bi bi-people fs-2 opacity-75"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card user-stats-card bg-success text-white">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="card-title mb-0">{{ active_users }}</h5>
+            <p class="card-text small mb-0">アクティブユーザー</p>
+          </div>
+          <i class="bi bi-person-check fs-2 opacity-75"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card user-stats-card bg-info text-white">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="card-title mb-0">{{ staff_users }}</h5>
+            <p class="card-text small mb-0">スタッフユーザー</p>
+          </div>
+          <i class="bi bi-shield-check fs-2 opacity-75"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Search and Filter Form -->
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="GET" class="row g-3" id="searchForm">
+      <div class="col-md-4">
+        {{ search_form.search.label_tag }}
+        {{ search_form.search }}
+      </div>
+      <div class="col-md-3">
+        {{ search_form.is_active.label_tag }}
+        {{ search_form.is_active }}
+      </div>
+      <div class="col-md-3">
+        {{ search_form.is_staff.label_tag }}
+        {{ search_form.is_staff }}
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-outline-primary me-2">
+          <i class="bi bi-search me-1"></i>検索
+        </button>
+        <a href="{% url 'user_list' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-counterclockwise"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- User List Table -->
+<div class="card">
+  <div class="card-body">
+    {% if page_obj %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th scope="col">ユーザー</th>
+            <th scope="col">メールアドレス</th>
+            <th scope="col">ステータス</th>
+            <th scope="col">権限</th>
+            <th scope="col">登録日</th>
+            <th scope="col" class="table-actions">アクション</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user_obj in page_obj %}
+          <tr>
+            <td>
+              <div class="d-flex align-items-center">
+                <div class="user-avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3">
+                  {% if user_obj.first_name %}
+                    {{ user_obj.first_name|first }}
+                  {% else %}
+                    {{ user_obj.username|first|upper }}
+                  {% endif %}
+                </div>
+                <div>
+                  <div class="fw-semibold">{{ user_obj.username }}</div>
+                  {% if user_obj.first_name or user_obj.last_name %}
+                  <div class="text-muted small">{{ user_obj.first_name }} {{ user_obj.last_name }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </td>
+            <td>
+              <span class="text-break">{{ user_obj.email }}</span>
+            </td>
+            <td>
+              {% if user_obj.is_active %}
+                <span class="badge bg-success status-badge">
+                  <i class="bi bi-check-circle me-1"></i>アクティブ
+                </span>
+              {% else %}
+                <span class="badge bg-secondary status-badge">
+                  <i class="bi bi-pause-circle me-1"></i>非アクティブ
+                </span>
+              {% endif %}
+            </td>
+            <td>
+              {% if user_obj.is_superuser %}
+                <span class="badge bg-danger status-badge">
+                  <i class="bi bi-shield-fill-exclamation me-1"></i>スーパーユーザー
+                </span>
+              {% elif user_obj.is_staff %}
+                <span class="badge bg-info status-badge">
+                  <i class="bi bi-shield-check me-1"></i>スタッフ
+                </span>
+              {% else %}
+                <span class="badge bg-light text-dark status-badge">
+                  <i class="bi bi-person me-1"></i>一般
+                </span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="text-muted small">{{ user_obj.date_joined|date:"Y/m/d H:i" }}</span>
+            </td>
+            <td class="table-actions">
+              <div class="btn-group btn-group-sm" role="group">
+                <a href="{% url 'user_edit' user_obj.id %}" 
+                   class="btn btn-outline-primary" title="編集">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <button type="button" 
+                        class="btn btn-outline-{% if user_obj.is_active %}warning{% else %}success{% endif %} toggle-active-btn"
+                        data-user-id="{{ user_obj.id }}"
+                        data-username="{{ user_obj.username }}"
+                        data-is-active="{{ user_obj.is_active|yesno:'true,false' }}"
+                        title="{% if user_obj.is_active %}無効化{% else %}有効化{% endif %}"
+                        {% if user_obj.id == user.id or user_obj.is_superuser %}disabled{% endif %}>
+                  <i class="bi bi-{% if user_obj.is_active %}pause{% else %}play{% endif %}"></i>
+                </button>
+                <a href="{% url 'user_password_reset' user_obj.id %}" 
+                   class="btn btn-outline-info" title="パスワードリセット">
+                  <i class="bi bi-key"></i>
+                </a>
+                <a href="{% url 'user_delete' user_obj.id %}" 
+                   class="btn btn-outline-danger" title="削除"
+                   {% if user_obj.id == user.id or user_obj.is_superuser %}style="display:none"{% endif %}>
+                  <i class="bi bi-trash"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav aria-label="ユーザー一覧ページネーション" class="mt-4">
+      <ul class="pagination pagination-sm justify-content-center">
+        {% if page_obj.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page=1">最初</a>
+          </li>
+          <li class="page-item">
+            <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">前</a>
+          </li>
+        {% endif %}
+
+        <li class="page-item active">
+          <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+        </li>
+
+        {% if page_obj.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">次</a>
+          </li>
+          <li class="page-item">
+            <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page_obj.paginator.num_pages }}">最後</a>
+          </li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="text-center py-5">
+      <div class="text-muted">
+        <i class="bi bi-people display-1 mb-3"></i>
+        <h5>ユーザーが見つかりませんでした</h5>
+        <p class="mb-3">検索条件を変更してお試しください。</p>
+        <a href="{% url 'user_list' %}" class="btn btn-outline-secondary">すべて表示</a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Toggle Active Status (AJAX)
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleButtons = document.querySelectorAll('.toggle-active-btn');
+    
+    toggleButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const userId = this.dataset.userId;
+            const username = this.dataset.username;
+            const isActive = this.dataset.isActive === 'true';
+            const actionText = isActive ? '無効化' : '有効化';
+            
+            if (confirm(`ユーザー「${username}」を${actionText}しますか？`)) {
+                // Show loading state
+                const originalHtml = this.innerHTML;
+                this.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>';
+                this.disabled = true;
+                
+                fetch(`{% url 'user_toggle_active' 0 %}`.replace('0', userId), {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken'),
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Reload the page to reflect changes
+                        location.reload();
+                    } else {
+                        alert(data.message || 'エラーが発生しました。');
+                        // Restore button state
+                        this.innerHTML = originalHtml;
+                        this.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('通信エラーが発生しました。');
+                    // Restore button state
+                    this.innerHTML = originalHtml;
+                    this.disabled = false;
+                });
+            }
+        });
+    });
+});
+
+// Get CSRF token from cookie
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}
