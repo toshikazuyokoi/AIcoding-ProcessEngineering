@@ -1,3 +1,22 @@
+"""
+Temporary shim to bridge Django test discovery during phased migration.
+
+This file re-exports tests from the `tracker.tests` package so that
+`python manage.py test` (which expects `tracker.tests` to be a module)
+continues to work while we migrate the monolithic `tests.py` into a
+package structure.
+
+Remove this shim in Phase 7 when `tests.py` is permanently deleted.
+"""
+
+# Import from the transitional tests_pkg to avoid circular import with tracker.tests package
+try:
+    from tracker.tests_pkg.test_issue_api_comprehensive import *  # noqa: F401,F403
+except Exception:
+    try:
+        from tracker.tests_legacy import *  # noqa: F401,F403
+    except Exception:
+        raise
 from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.db.utils import IntegrityError
