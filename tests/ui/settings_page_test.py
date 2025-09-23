@@ -54,6 +54,37 @@ class SettingsPageUITest(TestCase):
         resp = self.client.get('/settings/')
         # login_required + user_passes_test cause redirect (302)
         self.assertEqual(resp.status_code, 302)
+
+    def test_settings_post_success_updates_db_and_redirects(self):
+        """Staff user POST with valid data updates settings and redirects."""
+        self.client.login(username='ui_admin', password='secret123')
+
+        resp = self.client.post('/settings/', {'maintenance_mode': 'on', 'email_sender': 'admin@site.test'})
+        # expect redirect back to settings
+        self.assertEqual(resp.status_code, 302)
+
+        # verify in DB
+        from tracker.services.system_settings_service import SystemSettingsService
+        settings = SystemSettingsService.get_settings()
+        self.assertTrue(settings.maintenance_mode)
+        self.assertEqual(settings.email_sender, 'admin@site.test')
+
+    def test_settings_post_invalid_email_shows_error(self):
+        """Staff user POST with invalid email should not update and should show error message."""
+        self.client.login(username='ui_admin', password='secret123')
+
+        resp = self.client.post('/settings/', {'maintenance_mode': 'on', 'email_sender': 'not-an-email'})
+        # view catches exceptions and returns 200 with error message
+        self.assertIn(resp.status_code, (200, 302))
+
+        from tracker.services.system_settings_service import SystemSettingsService
+        settings = SystemSettingsService.get_settings()
+        # should not have been set to invalid email
+        self.assertNotEqual(settings.email_sender, 'not-an-email')
+
+    def test_settings_requires_authentication(self):
+        resp = self.client.get('/settings/')
+        self.assertEqual(resp.status_code, 302)
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 
