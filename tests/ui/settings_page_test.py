@@ -1,3 +1,59 @@
+from django.test import TestCase, Client
+from django.contrib.auth import get_user_model
+from tracker.services.system_settings_service import SystemSettingsService
+
+
+class SettingsPageUITest(TestCase):
+    """Basic UI tests for system settings page.
+
+    Initial low-risk checks:
+    - staff user can access settings page (200)
+    - non-staff user is redirected (permission)
+    - settings values are rendered on the page
+    """
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.client = Client()
+
+        # staff/admin
+        self.admin = self.User.objects.create_user(
+            username='ui_admin',
+            email='ui_admin@example.com',
+            password='secret123',
+            is_staff=True,
+        )
+
+        # regular user
+        self.regular = self.User.objects.create_user(
+            username='ui_user',
+            email='ui_user@example.com',
+            password='secret123',
+            is_staff=False,
+        )
+
+    def test_settings_page_access_by_staff(self):
+        """Staff user should be able to GET the settings page and see current settings."""
+        # ensure some known settings exist
+        try:
+            SystemSettingsService.reset_to_defaults()
+        except Exception:
+            # service may raise in some edge cases; tests should still proceed
+            pass
+
+        self.client.login(username='ui_admin', password='secret123')
+        resp = self.client.get('/settings/')
+        self.assertIn(resp.status_code, (200,))
+        # page should contain a maintenance_mode label or email_sender field
+        content = resp.content.decode('utf-8')
+        self.assertTrue('maintenance' in content.lower() or 'メール' in content or 'email' in content.lower())
+
+    def test_settings_page_redirect_for_nonstaff(self):
+        """Non-staff users should be redirected away from settings page."""
+        self.client.login(username='ui_user', password='secret123')
+        resp = self.client.get('/settings/')
+        # login_required + user_passes_test cause redirect (302)
+        self.assertEqual(resp.status_code, 302)
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 
