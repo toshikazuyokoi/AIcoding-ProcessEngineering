@@ -55,6 +55,19 @@ class StatisticsPageUITest(TestCase):
             content = resp.content.decode('utf-8')
             self.assertTrue('プロジェクトが見つかりません' in content or 'エラー' in content or '指定されたプロジェクト' in content)
 
+    def test_malformed_project_id_param(self):
+        """Edge: project_id に数値以外や極端な値が渡された場合、安定してエラー扱いになること"""
+        self.client.login(username='staff', password='pass')
+        url = reverse('statistics')
+        # non-numeric and malicious-looking inputs
+        for bad in ['abc', '1;DROP TABLE projects;', ' ', '', '../../../']:
+            resp = self.client.get(url, {'filter_type': 'project', 'project_id': bad})
+            # view may redirect or render an error; accept 200/302/404 but must not 500
+            self.assertIn(resp.status_code, (200, 302, 404))
+            if resp.status_code == 200:
+                content = resp.content.decode('utf-8')
+                self.assertTrue('無効なプロジェクト' in content or 'エラー' in content or '指定されたプロジェクト' in content)
+
     def test_non_staff_redirected_from_statistics(self):
         self.client.login(username='user', password='pass')
         url = reverse('statistics')
