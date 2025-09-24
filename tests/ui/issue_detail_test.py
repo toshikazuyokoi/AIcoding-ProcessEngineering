@@ -7,6 +7,73 @@ class IssueDetailUITest(TestCase):
 
     def setUp(self):
         User = get_user_model()
+        self.user = User.objects.create_user(
+            username='user1',
+            email='user1_issues@example.com',
+            password='testpass123'
+        )
+
+        from tracker.models import Project, Issue, Comment
+
+        self.project = Project.objects.create(
+            name='Project A',
+            description='proj a',
+            created_by=self.user
+        )
+
+        self.issue = Issue.objects.create(
+            title='Detail Issue',
+            description='Detailed description content',
+            project=self.project,
+            created_by=self.user,
+            status='open',
+            priority='high'
+        )
+
+        # Add a comment
+        Comment.objects.create(
+            issue=self.issue,
+            user=self.user,
+            content='Initial comment'
+        )
+
+    def test_issue_detail_requires_login(self):
+        response = self.client.get(f'/issues/{self.issue.id}/')
+        self.assertRedirects(response, f'/login/?next=/issues/{self.issue.id}/')
+
+    def test_issue_detail_display(self):
+        self.client.force_login(self.user)
+        response = self.client.get(f'/issues/{self.issue.id}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'チケット詳細')
+        self.assertContains(response, 'Detail Issue')
+        self.assertContains(response, 'Detailed description content')
+        self.assertContains(response, '高') or self.assertContains(response, '優先度')
+        self.assertContains(response, self.user.username)
+        # Comment should be visible
+        self.assertContains(response, 'Initial comment')
+
+    def test_issue_edit_button_visible_for_creator(self):
+        self.client.force_login(self.user)
+        response = self.client.get(f'/issues/{self.issue.id}/')
+        self.assertEqual(response.status_code, 200)
+        # Edit button/link exists
+        self.assertContains(response, '編集')
+
+    def test_issue_404_for_nonexistent(self):
+        self.client.force_login(self.user)
+        response = self.client.get('/issues/999999/')
+        self.assertEqual(response.status_code, 404)
+from django.test import TestCase
+from django.contrib.auth import get_user_model
+
+
+class IssueDetailUITest(TestCase):
+    """チケット詳細画面UI機能のテストクラス (modular)"""
+
+    def setUp(self):
+        User = get_user_model()
         self.admin_user = User.objects.create_user(
             username='admin2',
             email='admin2_issues@example.com',
